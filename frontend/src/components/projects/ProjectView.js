@@ -539,7 +539,7 @@ const ProjectView = () => {
                     >
                       <Typography 
                         variant="body2" 
-                        color="text.secondary" 
+                        color="textSecondary" 
                         sx={{ 
                           mb: 2,
                           flex: 1,
@@ -826,7 +826,8 @@ const ProjectView = () => {
         open={documentViewDialogOpen} 
         onClose={() => setDocumentViewDialogOpen(false)} 
         document={selectedDocument} 
-        entityClasses={project?.entity_classes} 
+        entityClasses={project?.entity_classes}
+        navigate={navigate}
       />
 
       {/* Delete Confirmation Dialog */}
@@ -851,7 +852,7 @@ const ProjectView = () => {
   );
 };
 
-const DocumentViewDialog = ({ open, onClose, document, entityClasses }) => {
+const DocumentViewDialog = ({ open, onClose, document, entityClasses, navigate }) => {
   const getHighlightColor = (entityName) => {
     const entity = entityClasses.find(e => e.name === entityName);
     return entity ? entity.color : '#ffffff';
@@ -950,6 +951,20 @@ const DocumentViewDialog = ({ open, onClose, document, entityClasses }) => {
           {renderHighlightedText()}
         </Paper>
       </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Close</Button>
+        <Button
+          variant="contained"
+          color="primary"
+          startIcon={<EditIcon />}
+          onClick={() => {
+            onClose();
+            navigate(`/annotate/${document?.id}`);
+          }}
+        >
+          Annotate
+        </Button>
+      </DialogActions>
     </Dialog>
   );
 };
