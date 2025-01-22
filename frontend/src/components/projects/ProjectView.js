@@ -23,6 +23,7 @@ import {
   ListItem,
   ListItemText,
   IconButton,
+  DialogContentText,
 } from '@mui/material';
 import {
   ViewModule as GridViewIcon,
@@ -32,6 +33,8 @@ import {
   Download as DownloadIcon,
   Add as AddIcon,
   Delete as DeleteIcon,
+  Close as CloseIcon,
+  Visibility as VisibilityIcon,
 } from '@mui/icons-material';
 import { ChromePicker } from 'react-color';
 import { toast } from 'react-toastify';
@@ -73,6 +76,8 @@ const ProjectView = () => {
   const [editingEntity, setEditingEntity] = useState(null);
   const [editingEntityColor, setEditingEntityColor] = useState(null);
   const [editingEntityName, setEditingEntityName] = useState({ entity: null, name: '' });
+  const [documentViewDialogOpen, setDocumentViewDialogOpen] = useState(false);
+  const [selectedDocument, setSelectedDocument] = useState(null);
 
   useEffect(() => {
     let isSubscribed = true;
@@ -140,9 +145,9 @@ const ProjectView = () => {
     try {
       setLoading(true);
       const updatedProject = {
-        name: project.name,
-        description: project.description,
-        entity_classes: project.entity_classes
+        name: editedProject.name,
+        description: editedProject.description,
+        entity_classes: editedProject.entity_classes
       };
       
       console.log('Saving project with data:', updatedProject);
@@ -160,7 +165,7 @@ const ProjectView = () => {
         toast.success('Project updated successfully');
       }
       
-      // Refresh data
+      // Refresh data and close dialog
       await refreshData();
       setEditDialogOpen(false);
     } catch (error) {
@@ -342,6 +347,11 @@ const ProjectView = () => {
     }
   };
 
+  const handleDocumentView = (document) => {
+    setSelectedDocument(document);
+    setDocumentViewDialogOpen(true);
+  };
+
   if (loading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
@@ -454,6 +464,13 @@ const ProjectView = () => {
                     >
                       Annotate
                     </Button>
+                    <Button
+                      size="small"
+                      variant="contained"
+                      onClick={() => handleDocumentView(doc)}
+                    >
+                      View
+                    </Button>
                   </CardActions>
                 </Card>
               </Grid>
@@ -493,6 +510,13 @@ const ProjectView = () => {
                     </>
                   }
                 />
+                <Button
+                  size="small"
+                  variant="contained"
+                  onClick={() => handleDocumentView(doc)}
+                >
+                  View
+                </Button>
               </ListItem>
             ))}
           </List>
@@ -656,7 +680,117 @@ const ProjectView = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <DocumentViewDialog 
+        open={documentViewDialogOpen} 
+        onClose={() => setDocumentViewDialogOpen(false)} 
+        document={selectedDocument} 
+        entityClasses={project?.entity_classes} 
+      />
     </Container>
+  );
+};
+
+const DocumentViewDialog = ({ open, onClose, document, entityClasses }) => {
+  const getHighlightColor = (entityName) => {
+    const entity = entityClasses.find(e => e.name === entityName);
+    return entity ? entity.color : '#ffffff';
+  };
+
+  const renderHighlightedText = () => {
+    if (!document?.text || !document?.annotations) return document?.text;
+
+    // Sort annotations by start_index to handle overlapping
+    const sortedAnnotations = [...document.annotations].sort((a, b) => a.start_index - b.start_index);
+    
+    let lastIndex = 0;
+    const textParts = [];
+
+    sortedAnnotations.forEach((annotation, index) => {
+      // Add text before the annotation
+      if (annotation.start_index > lastIndex) {
+        textParts.push(
+          <span key={`text-${index}`}>
+            {document.text.slice(lastIndex, annotation.start_index)}
+          </span>
+        );
+      }
+
+      // Add the highlighted annotation
+      textParts.push(
+        <span
+          key={`highlight-${index}`}
+          style={{
+            backgroundColor: getHighlightColor(annotation.entity),
+            padding: '0 2px',
+            borderRadius: '2px',
+            margin: '0 2px'
+          }}
+        >
+          {document.text.slice(annotation.start_index, annotation.end_index)}
+        </span>
+      );
+
+      lastIndex = annotation.end_index;
+    });
+
+    // Add any remaining text
+    if (lastIndex < document.text.length) {
+      textParts.push(
+        <span key="text-end">
+          {document.text.slice(lastIndex)}
+        </span>
+      );
+    }
+
+    return textParts;
+  };
+
+  return (
+    <Dialog 
+      open={open} 
+      onClose={onClose}
+      maxWidth="md"
+      fullWidth
+      onClick={(e) => e.stopPropagation()}
+    >
+      <DialogTitle>
+        <Box display="flex" justifyContent="space-between" alignItems="center">
+          <Typography variant="h6">Document View</Typography>
+          <IconButton onClick={onClose} size="small">
+            <CloseIcon />
+          </IconButton>
+        </Box>
+      </DialogTitle>
+      <DialogContent>
+        <Box mb={2}>
+          <Typography variant="subtitle1" gutterBottom>Annotations:</Typography>
+          {document?.annotations?.map((annotation, index) => (
+            <Chip
+              key={index}
+              label={`${annotation.text} (${annotation.entity})`}
+              style={{ 
+                backgroundColor: getHighlightColor(annotation.entity),
+                margin: '0 4px 4px 0'
+              }}
+            />
+          ))}
+        </Box>
+        <Typography variant="subtitle1" gutterBottom>Document Text:</Typography>
+        <Paper 
+          variant="outlined" 
+          sx={{ 
+            p: 2, 
+            maxHeight: '400px', 
+            overflow: 'auto',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word'
+          }}
+        >
+          {renderHighlightedText()}
+        </Paper>
+      </DialogContent>
+    </Dialog>
   );
 };
 

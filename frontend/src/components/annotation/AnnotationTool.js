@@ -1,50 +1,65 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
-  Container,
-  Paper,
   Box,
+  Paper,
   Typography,
   Button,
-  CircularProgress,
+  Chip,
   Dialog,
   DialogTitle,
   DialogContent,
+  DialogContentText,
   DialogActions,
-  Popover,
-  TextField,
+  IconButton,
+  FormControlLabel,
+  Checkbox,
   List,
   ListItem,
   ListItemText,
+  CircularProgress,
+  Popover,
+  FormControl,
+  Select,
+  MenuItem,
+  Stack,
+  TextField,
   InputAdornment,
-  Chip,
-  IconButton,
 } from '@mui/material';
 import {
+  Close as CloseIcon,
   NavigateBefore as NavigateBeforeIcon,
   NavigateNext as NavigateNextIcon,
   Save as SaveIcon,
   Search as SearchIcon,
-  Close as CloseIcon,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
-import { getDocument, updateDocument, getProject, getProjectDocuments } from '../../utils/api';
+import {
+  getDocument,
+  updateDocument,
+  getProject,
+  getProjectDocuments,
+} from '../../utils/api';
 
 const AnnotationTool = () => {
   const { documentId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [docData, setDocData] = useState(null);
   const [projectData, setProjectData] = useState(null);
   const [entities, setEntities] = useState([]);
   const [selectedEntity, setSelectedEntity] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [openConfirm, setOpenConfirm] = useState(false);
-  const [nextDocId, setNextDocId] = useState(null);
   const [projectDocuments, setProjectDocuments] = useState([]);
   const [anchorEl, setAnchorEl] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [focusedEntityIndex, setFocusedEntityIndex] = useState(null);
-  const textContentRef = useRef(null);
+  const [autoSave, setAutoSave] = useState(false);
+  const [unsavedDocuments, setUnsavedDocuments] = useState(new Set());
+  const [documentChanges, setDocumentChanges] = useState(new Map());
+  const [showExitDialog, setShowExitDialog] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState(null);
+  const textContentRef = React.useRef(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -95,6 +110,22 @@ const AnnotationTool = () => {
     fetchData();
   }, [fetchData]);
 
+  useEffect(() => {
+    if (docData) {
+      // Initialize document changes with existing annotations
+      setDocumentChanges(prev => {
+        const newMap = new Map(prev);
+        if (!newMap.has(documentId)) {
+          newMap.set(documentId, {
+            entities: docData.entities || [],
+            annotations: docData.annotations || []
+          });
+        }
+        return newMap;
+      });
+    }
+  }, [docData, documentId]);
+
   const handleKeyPress = useCallback((e) => {
     if (e.key >= '1' && e.key <= '9') {
       const index = parseInt(e.key) - 1;
@@ -120,10 +151,33 @@ const AnnotationTool = () => {
     setFocusedEntityIndex(null);
   }, []);
 
-  const removeEntity = useCallback((index) => {
-    setEntities(prev => prev.filter((_, i) => i !== index));
-    handlePopoverClose();
-  }, [handlePopoverClose]);
+  const handleRemoveEntity = useCallback((index) => {
+    const newEntities = [...entities];
+    newEntities.splice(index, 1);
+    setEntities(newEntities);
+    
+    setDocumentChanges(prev => {
+      const formattedEntities = newEntities.map(entity => ({
+        start: entity.start,
+        end: entity.end,
+        label: entity.label,
+        text: entity.text
+      }));
+
+      const formattedAnnotations = newEntities.map(entity => ({
+        start_index: entity.start,
+        end_index: entity.end,
+        entity: entity.label,
+        text: entity.text
+      }));
+
+      return new Map(prev).set(documentId, {
+        entities: formattedEntities,
+        annotations: formattedAnnotations
+      });
+    });
+    setUnsavedDocuments(prev => new Set(prev).add(documentId));
+  }, [entities, documentId]);
 
   const handleClassChange = useCallback((entityClass) => {
     if (focusedEntityIndex !== null) {
@@ -172,46 +226,231 @@ const AnnotationTool = () => {
     console.log('New entity:', newEntity);
     setEntities(prev => [...prev, newEntity]);
     selection.removeAllRanges();
-  }, [selectedEntity]);
+    setUnsavedDocuments(prev => new Set(prev).add(documentId));
+    setDocumentChanges(prev => {
+      const existingChanges = prev.get(documentId) || {
+        entities: [],
+        annotations: []
+      };
 
-  const handleSave = useCallback(async () => {
-    try {
-      const annotations = entities.map(entity => ({
+      const formattedEntity = {
+        start: newEntity.start,
+        end: newEntity.end,
+        label: newEntity.label,
+        text: newEntity.text
+      };
+
+      const formattedAnnotation = {
+        start_index: newEntity.start,
+        end_index: newEntity.end,
+        entity: newEntity.label,
+        text: newEntity.text
+      };
+
+      return new Map(prev).set(documentId, {
+        entities: [...existingChanges.entities, formattedEntity],
+        annotations: [...existingChanges.annotations, formattedAnnotation]
+      });
+    });
+  }, [selectedEntity, documentId]);
+
+  const handleEntitiesChange = useCallback((newEntities) => {
+    setEntities(newEntities);
+    // Update document changes while preserving existing annotations
+    setDocumentChanges(prev => {
+      const existingChanges = prev.get(documentId) || {
+        entities: [],
+        annotations: []
+      };
+      
+      const formattedEntities = newEntities.map(entity => ({
+        start: entity.start,
+        end: entity.end,
+        label: entity.label,
+        text: entity.text
+      }));
+
+      const formattedAnnotations = newEntities.map(entity => ({
         start_index: entity.start,
         end_index: entity.end,
         entity: entity.label,
         text: entity.text
       }));
 
-      console.log('Saving annotations:', annotations);
-      await updateDocument(documentId, { annotations });
-      
-      toast.success('Annotations saved successfully');
-      
-      if (nextDocId) {
-        navigate(`/annotate/${nextDocId}`);
-        setNextDocId(null);
-        setOpenConfirm(false);
-      }
+      return new Map(prev).set(documentId, {
+        entities: formattedEntities,
+        annotations: formattedAnnotations
+      });
+    });
+    setUnsavedDocuments(prev => new Set(prev).add(documentId));
+  }, [documentId]);
+
+  const handleAddEntity = useCallback((newEntity) => {
+    const formattedEntity = {
+      start: newEntity.start,
+      end: newEntity.end,
+      label: newEntity.label,
+      text: newEntity.text
+    };
+
+    const formattedAnnotation = {
+      start_index: newEntity.start,
+      end_index: newEntity.end,
+      entity: newEntity.label,
+      text: newEntity.text
+    };
+
+    setEntities(prev => [...prev, newEntity]);
+    setDocumentChanges(prev => {
+      const existingChanges = prev.get(documentId) || {
+        entities: [],
+        annotations: []
+      };
+
+      return new Map(prev).set(documentId, {
+        entities: [...existingChanges.entities, formattedEntity],
+        annotations: [...existingChanges.annotations, formattedAnnotation]
+      });
+    });
+    setUnsavedDocuments(prev => new Set(prev).add(documentId));
+  }, [documentId]);
+
+  const handleSave = useCallback(async () => {
+    try {
+      const changes = documentChanges.get(documentId);
+      if (!changes) return;
+
+      await updateDocument(documentId, {
+        entities: changes.entities,
+        annotations: changes.annotations
+      });
+
+      setUnsavedDocuments(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(documentId);
+        return newSet;
+      });
+      setDocumentChanges(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(documentId);
+        return newMap;
+      });
+      toast.success('Changes saved successfully');
     } catch (error) {
       console.error('Error saving annotations:', error);
       toast.error('Failed to save annotations');
     }
-  }, [documentId, entities, navigate, nextDocId]);
+  }, [documentId, documentChanges]);
+
+  const handleSaveAll = useCallback(async () => {
+    try {
+      const unsavedDocIds = Array.from(unsavedDocuments);
+      
+      await Promise.all(
+        unsavedDocIds.map(async (docId) => {
+          const changes = documentChanges.get(docId);
+          if (changes) {
+            await updateDocument(docId, {
+              entities: changes.entities,
+              annotations: changes.annotations
+            });
+          }
+        })
+      );
+
+      setUnsavedDocuments(new Set());
+      setDocumentChanges(new Map());
+      toast.success('All documents saved successfully');
+      
+      if (pendingNavigation) {
+        navigate(pendingNavigation);
+        setPendingNavigation(null);
+      }
+    } catch (error) {
+      console.error('Error saving all documents:', error);
+      toast.error('Failed to save all documents');
+    }
+  }, [unsavedDocuments, documentChanges, pendingNavigation, navigate]);
+
+  const hasUnsavedChanges = unsavedDocuments.has(documentId);
 
   const navigateDocument = useCallback((direction) => {
     const currentIndex = projectDocuments.findIndex(doc => doc.id === documentId);
     const nextIndex = currentIndex + direction;
     
     if (nextIndex >= 0 && nextIndex < projectDocuments.length) {
-      if (entities.length > 0) {
-        setNextDocId(projectDocuments[nextIndex].id);
-        setOpenConfirm(true);
+      const nextDoc = projectDocuments[nextIndex];
+      
+      if (autoSave && hasUnsavedChanges) {
+        handleSave().then(() => {
+          navigate(`/annotate/${nextDoc.id}`);
+        });
       } else {
-        navigate(`/annotate/${projectDocuments[nextIndex].id}`);
+        navigate(`/annotate/${nextDoc.id}`);
       }
     }
-  }, [documentId, entities.length, navigate, projectDocuments]);
+  }, [projectDocuments, documentId, navigate, hasUnsavedChanges, autoSave, handleSave]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (unsavedDocuments.size > 0) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
+    const unblock = () => {
+      if (pendingNavigation) {
+        navigate(pendingNavigation);
+        setPendingNavigation(null);
+      }
+    };
+
+    const handleLocationChange = () => {
+      const currentPath = location.pathname;
+      if (!currentPath.includes('/annotate') && unsavedDocuments.size > 0) {
+        setShowExitDialog(true);
+        return false;
+      }
+      return true;
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [unsavedDocuments, location, navigate, pendingNavigation]);
+
+  const handleNavigationAttempt = (path) => {
+    if (!path.includes('/annotate') && unsavedDocuments.size > 0) {
+      setPendingNavigation(path);
+      setShowExitDialog(true);
+      return;
+    }
+    navigate(path);
+  };
+
+  const handleExitConfirm = async (shouldSave) => {
+    try {
+      if (shouldSave) {
+        await handleSaveAll();
+      }
+      setShowExitDialog(false);
+      if (pendingNavigation) {
+        navigate(pendingNavigation);
+        setPendingNavigation(null);
+      }
+    } catch (error) {
+      console.error('Error during exit:', error);
+      toast.error('Failed to save changes');
+    }
+  };
+
+  const handleExitCancel = () => {
+    setShowExitDialog(false);
+    setPendingNavigation(null);
+  };
 
   const renderedText = useMemo(() => {
     if (!docData?.text) return null;
@@ -272,7 +511,7 @@ const AnnotationTool = () => {
             }}
             onClick={(e) => {
               e.stopPropagation();
-              removeEntity(index);
+              handleRemoveEntity(index);
             }}
           >
             <CloseIcon sx={{ fontSize: 12 }} />
@@ -292,7 +531,7 @@ const AnnotationTool = () => {
     }
 
     return result;
-  }, [docData?.text, entities, handleEntityClick, removeEntity]);
+  }, [docData?.text, entities, handleEntityClick, handleRemoveEntity]);
 
   const filteredClasses = useMemo(() => {
     if (!projectData) return [];
@@ -310,11 +549,30 @@ const AnnotationTool = () => {
   }
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+    <Box maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
       <Paper sx={{ p: 3, mb: 3 }}>
         <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Typography variant="h5">Document Annotation</Typography>
-          <Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={autoSave}
+                  onChange={(e) => setAutoSave(e.target.checked)}
+                />
+              }
+              label="AutoSave"
+            />
+            {!autoSave && unsavedDocuments.size > 0 && (
+              <Button
+                variant="contained"
+                color="primary"
+                startIcon={<SaveIcon />}
+                onClick={handleSaveAll}
+              >
+                Save All ({unsavedDocuments.size})
+              </Button>
+            )}
             <Button
               startIcon={<NavigateBeforeIcon />}
               onClick={() => navigateDocument(-1)}
@@ -328,15 +586,6 @@ const AnnotationTool = () => {
               disabled={!projectDocuments.length || projectDocuments.findIndex(doc => doc.id === documentId) === projectDocuments.length - 1}
             >
               Next
-            </Button>
-            <Button
-              startIcon={<SaveIcon />}
-              variant="contained"
-              color="primary"
-              onClick={handleSave}
-              sx={{ ml: 2 }}
-            >
-              Save
             </Button>
           </Box>
         </Box>
@@ -384,29 +633,6 @@ const AnnotationTool = () => {
           {renderedText}
         </Box>
       </Paper>
-
-      <Dialog
-        open={openConfirm}
-        onClose={() => setOpenConfirm(false)}
-      >
-        <DialogTitle>Save Changes</DialogTitle>
-        <DialogContent>
-          <Typography>
-            Do you want to save your changes before moving to the next document?
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => {
-            setOpenConfirm(false);
-            if (nextDocId) navigate(`/annotate/${nextDocId}`);
-          }}>
-            Don't Save
-          </Button>
-          <Button onClick={handleSave} variant="contained" color="primary">
-            Save
-          </Button>
-        </DialogActions>
-      </Dialog>
 
       <Popover
         open={Boolean(anchorEl)}
@@ -464,7 +690,28 @@ const AnnotationTool = () => {
           </List>
         </Box>
       </Popover>
-    </Container>
+
+      {/* Exit Confirmation Dialog */}
+      <Dialog
+        open={showExitDialog}
+        onClose={() => setShowExitDialog(false)}
+      >
+        <DialogTitle>Unsaved Changes</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            You have unsaved changes. Would you like to save them before leaving?
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleExitCancel}>
+            Don't Save
+          </Button>
+          <Button onClick={() => handleExitConfirm(true)} variant="contained" color="primary" autoFocus>
+            Save
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
   );
 };
 
