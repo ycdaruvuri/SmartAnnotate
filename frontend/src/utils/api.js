@@ -91,9 +91,7 @@ export const uploadDocument = async (projectId, file) => {
 
 export const getProjectDocuments = async (projectId, skip = 0, limit = 10) => {
   try {
-    const response = await axios.get(
-      `${API_URL}/documents/project/${projectId}?skip=${skip}&limit=${limit}`
-    );
+    const response = await axios.get(`${API_URL}/projects/${projectId}/documents?skip=${skip}&limit=${limit}`);
     return response.data;
   } catch (error) {
     console.error('Error fetching project documents:', error);
@@ -103,10 +101,18 @@ export const getProjectDocuments = async (projectId, skip = 0, limit = 10) => {
 
 export const getDocument = async (documentId) => {
   try {
+    // Make sure documentId is a valid string
+    if (!documentId || typeof documentId !== 'string') {
+      throw new Error('Invalid document ID');
+    }
+
     const response = await axios.get(`${API_URL}/documents/${documentId}`);
     return response.data;
   } catch (error) {
     console.error('Error fetching document:', error);
+    if (error.message === 'Invalid document ID') {
+      throw new Error('Invalid document ID format');
+    }
     throw error;
   }
 };
@@ -123,7 +129,9 @@ export const updateDocument = async (documentId, documentData) => {
 
 export const exportProjectData = async (projectId) => {
   try {
-    const response = await axios.get(`${API_URL}/documents/project/${projectId}/export`);
+    const response = await axios.get(`${API_URL}/projects/${projectId}/export`, {
+      responseType: 'blob',
+    });
     return response.data;
   } catch (error) {
     console.error('Error exporting project data:', error);

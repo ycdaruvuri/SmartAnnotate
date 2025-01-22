@@ -44,15 +44,7 @@ const AnnotationTool = () => {
   const [focusedEntityRef, setFocusedEntityRef] = useState(null);
   const textContentRef = useRef(null);
 
-  useEffect(() => {
-    fetchData();
-    document.addEventListener('keydown', handleKeyPress);
-    return () => {
-      document.removeEventListener('keydown', handleKeyPress);
-    };
-  }, [documentId]);
-
-  const handleKeyPress = (event) => {
+  const handleKeyPress = useCallback((event) => {
     // Skip if we're in a text input
     if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
       return;
@@ -80,9 +72,9 @@ const AnnotationTool = () => {
         }
       }
     }
-  };
+  }, [docData]);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       const doc = await getDocument(documentId);
@@ -94,25 +86,65 @@ const AnnotationTool = () => {
         return;
       }
 
-      if (doc && !doc.project && doc.project_id) {
-        const projectData = await getProject(doc.project_id);
-        doc.project = projectData;
+      // Get project data if not included in document
+      let projectData = doc.project;
+      if (!projectData && doc.project_id) {
+        try {
+          projectData = await getProject(doc.project_id);
+          doc.project = projectData;
+        } catch (error) {
+          console.error('Error fetching project:', error);
+          toast.error('Error loading project data');
+          return;
+        }
+      }
+
+      if (!projectData) {
+        toast.error('Project data not found');
+        navigate('/projects');
+        return;
       }
 
       setDocData(doc);
       setEntities(doc.entities || []);
       
+      // Fetch other documents from the same project
       if (doc.project_id) {
-        const docs = await getProjectDocuments(doc.project_id);
-        setProjectDocuments(docs);
+        try {
+          const docs = await getProjectDocuments(doc.project_id);
+          setProjectDocuments(docs);
+        } catch (error) {
+          console.error('Error fetching project documents:', error);
+          toast.error('Error loading project documents');
+        }
       }
     } catch (error) {
       console.error('Error fetching document:', error);
-      toast.error('Failed to fetch document');
+      if (error.response?.status === 404) {
+        toast.error('Document not found');
+      } else if (error.response?.status === 403) {
+        toast.error('Not authorized to access this document');
+      } else {
+        toast.error('Error loading document');
+      }
+      navigate('/projects');
     } finally {
       setLoading(false);
     }
-  };
+  }, [documentId, navigate]);
+
+  useEffect(() => {
+    if (!documentId) {
+      toast.error('No document ID provided');
+      navigate('/projects');
+      return;
+    }
+    fetchData();
+    document.addEventListener('keydown', handleKeyPress);
+    return () => {
+      document.removeEventListener('keydown', handleKeyPress);
+    };
+  }, [documentId, fetchData, navigate]);
 
   const handleTextSelection = () => {
     if (!selectedEntity) return;
@@ -140,7 +172,7 @@ const AnnotationTool = () => {
     selection.removeAllRanges();
   };
 
-  const handleWordClick = (event) => {
+  const handleWordClick = useCallback((event) => {
     if (!selectedEntity) return;
 
     const word = event.target.innerText;
@@ -158,11 +190,11 @@ const AnnotationTool = () => {
     };
 
     setEntities([...entities, newEntity].sort((a, b) => a.start - b.start));
-  };
+  }, [selectedEntity, entities]);
 
-  const removeEntity = (index) => {
+  const removeEntity = useCallback((index) => {
     setEntities(entities.filter((_, i) => i !== index));
-  };
+  }, [entities]);
 
   const handleEntityClick = (event, index) => {
     event.stopPropagation();
@@ -210,6 +242,9 @@ const AnnotationTool = () => {
       
       if (nextDocId) {
         navigate(`/annotate/${nextDocId}`);
+      } else {
+        setOpenConfirm(false);
+        navigate(`/projects/${docData.project_id}`);
       }
     } catch (error) {
       console.error('Error saving annotations:', error);

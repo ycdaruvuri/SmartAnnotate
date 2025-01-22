@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from models.project import ProjectCreate, Project, ProjectUpdate
 from utils.auth import get_current_user
-from config.database import projects_collection
+from config.database import projects_collection, documents_collection
 from bson import ObjectId
 from datetime import datetime
 from typing import List
@@ -41,6 +41,32 @@ async def get_project(project_id: str, current_user = Depends(get_current_user))
     
     project["id"] = str(project.pop("_id"))
     return Project(**project)
+
+@router.get("/{project_id}/documents")
+async def get_project_documents(
+    project_id: str,
+    skip: int = 0,
+    limit: int = 10,
+    current_user = Depends(get_current_user)
+):
+    # First verify the project exists and belongs to the user
+    project = projects_collection.find_one({
+        "_id": ObjectId(project_id),
+        "user_id": str(current_user["_id"])
+    })
+    
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Get documents for the project
+    documents = []
+    cursor = documents_collection.find({"project_id": project_id}).skip(skip).limit(limit)
+    
+    for doc in cursor:
+        doc["id"] = str(doc.pop("_id"))
+        documents.append(doc)
+    
+    return documents
 
 @router.put("/{project_id}", response_model=Project)
 async def update_project(
