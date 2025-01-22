@@ -33,7 +33,7 @@ const Login = () => {
       await login(formData.email, formData.password);
       setIsAuth(true);
       toast.success('Successfully logged in!');
-      navigate('/projects');
+      navigate('/home');
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to login');
     }

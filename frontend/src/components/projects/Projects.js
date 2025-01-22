@@ -25,6 +25,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import { getProjects, createProject, updateProject, deleteProject } from '../../utils/api';
 import { toast } from 'react-toastify';
+import HomeButton from '../common/HomeButton';
 
 const Projects = () => {
   const navigate = useNavigate();
@@ -190,151 +191,154 @@ const Projects = () => {
   }
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
-        <Typography variant="h4">Projects</Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => handleOpenDialog()}
-        >
-          New Project
-        </Button>
-      </Box>
-
-      <Grid container spacing={3}>
-        {projects.map((project) => (
-          <Grid item xs={12} sm={6} md={4} key={project.id}>
-            <Card>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  {project.name}
-                </Typography>
-                <Typography color="textSecondary" paragraph>
-                  {project.description}
-                </Typography>
-                <Box display="flex" gap={1} flexWrap="wrap">
-                  {project.entity_classes.map((entity) => (
-                    <Chip
-                      key={entity.name}
-                      label={entity.name}
-                      size="small"
-                      style={{ backgroundColor: entity.color }}
-                    />
-                  ))}
-                </Box>
-              </CardContent>
-              <CardActions>
-                <Button size="small" onClick={() => navigate(`/projects/${project.id}`)}>
-                  View
-                </Button>
-                <IconButton
-                  size="small"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleOpenDialog(project);
-                  }}
-                >
-                  <EditIcon />
-                </IconButton>
-                <IconButton
-                  size="small"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDeleteProject(project.id);
-                  }}
-                >
-                  <DeleteIcon />
-                </IconButton>
-              </CardActions>
-            </Card>
-          </Grid>
-        ))}
-      </Grid>
-
-      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
-        <DialogTitle>{editingProject ? 'Edit Project' : 'New Project'}</DialogTitle>
-        <DialogContent>
-          <Box sx={{ mt: 2 }}>
-            <TextField
-              fullWidth
-              label="Project Name"
-              value={projectData.name}
-              onChange={(e) => setProjectData({ ...projectData, name: e.target.value })}
-              margin="normal"
-            />
-            <TextField
-              fullWidth
-              label="Description"
-              value={projectData.description}
-              onChange={(e) => setProjectData({ ...projectData, description: e.target.value })}
-              margin="normal"
-              multiline
-              rows={3}
-            />
-            <Typography variant="subtitle1" sx={{ mt: 2, mb: 1 }}>
-              Entity Classes
-            </Typography>
-            <Box sx={{ mb: 2 }}>
-              {projectData.entity_classes.map((entity) => (
-                <Chip
-                  key={entity.name}
-                  label={entity.name}
-                  onDelete={() => handleRemoveEntity(entity.name)}
-                  style={{ backgroundColor: entity.color, margin: '0 4px 4px 0' }}
-                />
-              ))}
-            </Box>
-            <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
-              <TextField
-                label="New Entity Name"
-                value={newEntity.name}
-                onChange={(e) => setNewEntity({ ...newEntity, name: e.target.value })}
-                size="small"
-              />
-              <Box sx={{ position: 'relative' }}>
-                <Button
-                  variant="outlined"
-                  onClick={() => setShowColorPicker(!showColorPicker)}
-                  style={{
-                    backgroundColor: newEntity.color,
-                    minWidth: '64px',
-                    minHeight: '40px',
-                  }}
-                />
-                {showColorPicker && (
-                  <Box sx={{ position: 'absolute', zIndex: 2 }}>
-                    <Box
-                      sx={{
-                        position: 'fixed',
-                        top: 0,
-                        right: 0,
-                        bottom: 0,
-                        left: 0,
-                      }}
-                      onClick={() => setShowColorPicker(false)}
-                    />
-                    <ChromePicker
-                      color={newEntity.color}
-                      onChange={(color) => setNewEntity({ ...newEntity, color: color.hex })}
-                    />
-                  </Box>
-                )}
-              </Box>
-              <Button variant="contained" onClick={handleAddEntity}>
-                Add Entity
-              </Button>
-            </Box>
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDialog}>Cancel</Button>
-          <Button onClick={handleSubmit} variant="contained">
-            {editingProject ? 'Update' : 'Create'}
+    <Box sx={{ p: 3 }}>
+      <HomeButton />
+      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+        <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
+          <Typography variant="h4">Projects</Typography>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => handleOpenDialog()}
+          >
+            New Project
           </Button>
-        </DialogActions>
-      </Dialog>
-    </Container>
+        </Box>
+
+        <Grid container spacing={3}>
+          {projects.map((project) => (
+            <Grid item xs={12} sm={6} md={4} key={project.id}>
+              <Card>
+                <CardContent>
+                  <Typography variant="h6" gutterBottom>
+                    {project.name}
+                  </Typography>
+                  <Typography color="textSecondary" paragraph>
+                    {project.description}
+                  </Typography>
+                  <Box display="flex" gap={1} flexWrap="wrap">
+                    {project.entity_classes.map((entity) => (
+                      <Chip
+                        key={entity.name}
+                        label={entity.name}
+                        size="small"
+                        style={{ backgroundColor: entity.color }}
+                      />
+                    ))}
+                  </Box>
+                </CardContent>
+                <CardActions>
+                  <Button size="small" onClick={() => navigate(`/projects/${project.id}`)}>
+                    View
+                  </Button>
+                  <IconButton
+                    size="small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenDialog(project);
+                    }}
+                  >
+                    <EditIcon />
+                  </IconButton>
+                  <IconButton
+                    size="small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteProject(project.id);
+                    }}
+                  >
+                    <DeleteIcon />
+                  </IconButton>
+                </CardActions>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+
+        <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
+          <DialogTitle>{editingProject ? 'Edit Project' : 'New Project'}</DialogTitle>
+          <DialogContent>
+            <Box sx={{ mt: 2 }}>
+              <TextField
+                fullWidth
+                label="Project Name"
+                value={projectData.name}
+                onChange={(e) => setProjectData({ ...projectData, name: e.target.value })}
+                margin="normal"
+              />
+              <TextField
+                fullWidth
+                label="Description"
+                value={projectData.description}
+                onChange={(e) => setProjectData({ ...projectData, description: e.target.value })}
+                margin="normal"
+                multiline
+                rows={3}
+              />
+              <Typography variant="subtitle1" sx={{ mt: 2, mb: 1 }}>
+                Entity Classes
+              </Typography>
+              <Box sx={{ mb: 2 }}>
+                {projectData.entity_classes.map((entity) => (
+                  <Chip
+                    key={entity.name}
+                    label={entity.name}
+                    onDelete={() => handleRemoveEntity(entity.name)}
+                    style={{ backgroundColor: entity.color, margin: '0 4px 4px 0' }}
+                  />
+                ))}
+              </Box>
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                <TextField
+                  label="New Entity Name"
+                  value={newEntity.name}
+                  onChange={(e) => setNewEntity({ ...newEntity, name: e.target.value })}
+                  size="small"
+                />
+                <Box sx={{ position: 'relative' }}>
+                  <Button
+                    variant="outlined"
+                    onClick={() => setShowColorPicker(!showColorPicker)}
+                    style={{
+                      backgroundColor: newEntity.color,
+                      minWidth: '64px',
+                      minHeight: '40px',
+                    }}
+                  />
+                  {showColorPicker && (
+                    <Box sx={{ position: 'absolute', zIndex: 2 }}>
+                      <Box
+                        sx={{
+                          position: 'fixed',
+                          top: 0,
+                          right: 0,
+                          bottom: 0,
+                          left: 0,
+                        }}
+                        onClick={() => setShowColorPicker(false)}
+                      />
+                      <ChromePicker
+                        color={newEntity.color}
+                        onChange={(color) => setNewEntity({ ...newEntity, color: color.hex })}
+                      />
+                    </Box>
+                  )}
+                </Box>
+                <Button variant="contained" onClick={handleAddEntity}>
+                  Add Entity
+                </Button>
+              </Box>
+            </Box>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleCloseDialog}>Cancel</Button>
+            <Button onClick={handleSubmit} variant="contained">
+              {editingProject ? 'Update' : 'Create'}
+            </Button>
+          </DialogActions>
+        </Dialog>
+      </Container>
+    </Box>
   );
 };
 

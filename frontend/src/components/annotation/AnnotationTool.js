@@ -42,6 +42,7 @@ import {
   getProject,
   getProjectDocuments,
 } from '../../utils/api';
+import HomeButton from '../common/HomeButton';
 
 const AnnotationTool = () => {
   const { documentId } = useParams();
@@ -605,197 +606,200 @@ const AnnotationTool = () => {
   }
 
   return (
-    <Box maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      <Paper sx={{ p: 3, mb: 3 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Button
-            variant="outlined"
-            startIcon={<ArrowBackIcon />}
-            onClick={handleBack}
-          >
-            Back to Project
-          </Button>
-          <Box sx={{ display: 'flex', gap: 2 }}>
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={autoSave}
-                  onChange={(e) => setAutoSave(e.target.checked)}
-                />
-              }
-              label="AutoSave"
-            />
+    <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <HomeButton position={{ top: 20, right: 20 }} />
+      <Box maxWidth="lg" sx={{ mt: 4, mb: 4, flex: 1 }}>
+        <Paper sx={{ p: 3, mb: 3 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
             <Button
-              variant="contained"
-              color={isComplete ? "success" : "primary"}
-              onClick={handleMarkComplete}
-              startIcon={isComplete ? <CheckIcon /> : null}
+              variant="outlined"
+              startIcon={<ArrowBackIcon />}
+              onClick={handleBack}
             >
-              {isComplete ? "Marked Complete" : "Mark as Complete"}
+              Back to Project
             </Button>
-            {!autoSave && unsavedDocuments.size > 0 && (
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={autoSave}
+                    onChange={(e) => setAutoSave(e.target.checked)}
+                  />
+                }
+                label="AutoSave"
+              />
               <Button
                 variant="contained"
-                color="primary"
-                startIcon={<SaveIcon />}
-                onClick={handleSaveAll}
+                color={isComplete ? "success" : "primary"}
+                onClick={handleMarkComplete}
+                startIcon={isComplete ? <CheckIcon /> : null}
               >
-                Save All ({unsavedDocuments.size})
+                {isComplete ? "Marked Complete" : "Mark as Complete"}
               </Button>
-            )}
-            <Button
-              startIcon={<NavigateBeforeIcon />}
-              onClick={() => navigateDocument(-1)}
-              disabled={!projectDocuments.length || projectDocuments.findIndex(doc => doc.id === documentId) === 0}
-            >
-              Previous
-            </Button>
-            <Button
-              endIcon={<NavigateNextIcon />}
-              onClick={() => navigateDocument(1)}
-              disabled={!projectDocuments.length || projectDocuments.findIndex(doc => doc.id === documentId) === projectDocuments.length - 1}
-            >
-              Next
-            </Button>
-          </Box>
-        </Box>
-
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="subtitle1" gutterBottom>
-            Entity Classes (1-9 keys to select):
-          </Typography>
-          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-            {projectData?.entity_classes.map((ec, index) => (
-              <Chip
-                key={index}
-                label={`${index + 1}. ${ec.name}`}
-                sx={{
-                  backgroundColor: ec.color,
-                  cursor: 'pointer',
-                  border: selectedEntity?.name === ec.name ? '2px solid black' : 'none',
-                  '&:hover': {
-                    opacity: 0.8,
-                  },
-                }}
-                onClick={() => setSelectedEntity(ec)}
-              />
-            ))}
-          </Box>
-        </Box>
-
-        <Box
-          ref={textContentRef}
-          sx={{
-            p: 2,
-            border: '1px solid #ccc',
-            borderRadius: 1,
-            minHeight: '200px',
-            whiteSpace: 'pre-wrap',
-            backgroundColor: '#f5f5f5',
-            cursor: 'text',
-            lineHeight: 1.8,
-            '& mark': {
-              textDecoration: 'none',
-            },
-          }}
-          onMouseUp={handleTextSelection}
-        >
-          {renderedText}
-        </Box>
-      </Paper>
-
-      <Popover
-        open={Boolean(anchorEl)}
-        anchorEl={anchorEl}
-        onClose={handlePopoverClose}
-        anchorOrigin={{
-          vertical: 'bottom',
-          horizontal: 'left',
-        }}
-        transformOrigin={{
-          vertical: 'top',
-          horizontal: 'left',
-        }}
-      >
-        <Box sx={{ p: 1, width: 250 }}>
-          <TextField
-            fullWidth
-            size="small"
-            placeholder="Search classes..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon />
-                </InputAdornment>
-              ),
-            }}
-          />
-          <List dense>
-            {filteredClasses.map((ec, index) => (
-              <ListItem
-                key={index}
-                button
-                onClick={() => handleClassChange(ec)}
+              {!autoSave && unsavedDocuments.size > 0 && (
+                <Button
+                  variant="contained"
+                  color="primary"
+                  startIcon={<SaveIcon />}
+                  onClick={handleSaveAll}
+                >
+                  Save All ({unsavedDocuments.size})
+                </Button>
+              )}
+              <Button
+                startIcon={<NavigateBeforeIcon />}
+                onClick={() => navigateDocument(-1)}
+                disabled={!projectDocuments.length || projectDocuments.findIndex(doc => doc.id === documentId) === 0}
               >
-                <ListItemText
-                  primary={ec.name}
-                  secondary={
-                    <Box
-                      component="span"
-                      sx={{
-                        width: 16,
-                        height: 16,
-                        backgroundColor: ec.color,
-                        display: 'inline-block',
-                        borderRadius: '50%',
-                        marginRight: 1,
-                      }}
-                    />
-                  }
-                />
-              </ListItem>
-            ))}
-          </List>
-        </Box>
-      </Popover>
+                Previous
+              </Button>
+              <Button
+                endIcon={<NavigateNextIcon />}
+                onClick={() => navigateDocument(1)}
+                disabled={!projectDocuments.length || projectDocuments.findIndex(doc => doc.id === documentId) === projectDocuments.length - 1}
+              >
+                Next
+              </Button>
+            </Box>
+          </Box>
 
-      <Dialog
-        open={showExitDialog}
-        onClose={() => {
-          setShowExitDialog(false);
-          setPendingNavigation(null);
-        }}
-      >
-        <DialogTitle>Unsaved Changes</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            You have unsaved changes. Would you like to save them before leaving?
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button 
-            onClick={() => {
-              setShowExitDialog(false);
-              setPendingNavigation(null);
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="subtitle1" gutterBottom>
+              Entity Classes (1-9 keys to select):
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+              {projectData?.entity_classes.map((ec, index) => (
+                <Chip
+                  key={index}
+                  label={`${index + 1}. ${ec.name}`}
+                  sx={{
+                    backgroundColor: ec.color,
+                    cursor: 'pointer',
+                    border: selectedEntity?.name === ec.name ? '2px solid black' : 'none',
+                    '&:hover': {
+                      opacity: 0.8,
+                    },
+                  }}
+                  onClick={() => setSelectedEntity(ec)}
+                />
+              ))}
+            </Box>
+          </Box>
+
+          <Box
+            ref={textContentRef}
+            sx={{
+              p: 2,
+              border: '1px solid #ccc',
+              borderRadius: 1,
+              minHeight: '200px',
+              whiteSpace: 'pre-wrap',
+              backgroundColor: '#f5f5f5',
+              cursor: 'text',
+              lineHeight: 1.8,
+              '& mark': {
+                textDecoration: 'none',
+              },
             }}
+            onMouseUp={handleTextSelection}
           >
-            Cancel
-          </Button>
-          <Button 
-            onClick={() => handleExitConfirm(false)}
-          >
-            Don't Save
-          </Button>
-          <Button
-            variant="contained"
-            onClick={() => handleExitConfirm(true)}
-          >
-            Save & Exit
-          </Button>
-        </DialogActions>
-      </Dialog>
+            {renderedText}
+          </Box>
+        </Paper>
+
+        <Popover
+          open={Boolean(anchorEl)}
+          anchorEl={anchorEl}
+          onClose={handlePopoverClose}
+          anchorOrigin={{
+            vertical: 'bottom',
+            horizontal: 'left',
+          }}
+          transformOrigin={{
+            vertical: 'top',
+            horizontal: 'left',
+          }}
+        >
+          <Box sx={{ p: 1, width: 250 }}>
+            <TextField
+              fullWidth
+              size="small"
+              placeholder="Search classes..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon />
+                  </InputAdornment>
+                ),
+              }}
+            />
+            <List dense>
+              {filteredClasses.map((ec, index) => (
+                <ListItem
+                  key={index}
+                  button
+                  onClick={() => handleClassChange(ec)}
+                >
+                  <ListItemText
+                    primary={ec.name}
+                    secondary={
+                      <Box
+                        component="span"
+                        sx={{
+                          width: 16,
+                          height: 16,
+                          backgroundColor: ec.color,
+                          display: 'inline-block',
+                          borderRadius: '50%',
+                          marginRight: 1,
+                        }}
+                      />
+                    }
+                  />
+                </ListItem>
+              ))}
+            </List>
+          </Box>
+        </Popover>
+
+        <Dialog
+          open={showExitDialog}
+          onClose={() => {
+            setShowExitDialog(false);
+            setPendingNavigation(null);
+          }}
+        >
+          <DialogTitle>Unsaved Changes</DialogTitle>
+          <DialogContent>
+            <DialogContentText>
+              You have unsaved changes. Would you like to save them before leaving?
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button 
+              onClick={() => {
+                setShowExitDialog(false);
+                setPendingNavigation(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={() => handleExitConfirm(false)}
+            >
+              Don't Save
+            </Button>
+            <Button
+              variant="contained"
+              onClick={() => handleExitConfirm(true)}
+            >
+              Save & Exit
+            </Button>
+          </DialogActions>
+        </Dialog>
+      </Box>
     </Box>
   );
 };

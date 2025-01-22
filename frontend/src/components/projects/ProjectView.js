@@ -60,6 +60,7 @@ import {
   bulkDeleteDocuments,
   deleteProject
 } from '../../utils/api';
+import HomeButton from '../common/HomeButton';
 
 const COLOR_PALETTE = [
   '#ffeb3b', '#ffc107', '#ff9800', '#ff5722', '#f44336',
@@ -422,6 +423,7 @@ const ProjectView = () => {
 
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+      <HomeButton />
       {/* Project Header */}
       <Paper sx={{ p: 3, mb: 3 }}>
         <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
