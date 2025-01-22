@@ -1,46 +1,103 @@
-# Getting Started with Create React App
+# NER Annotation Tool
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+A full-stack application for annotating text with custom Named Entity Recognition (NER) labels. This tool provides an intuitive interface for creating and managing text annotations.
 
-## Available Scripts
+## Features
 
-In the project directory, you can run:
+- Upload and manage text documents for annotation
+- Interactive text selection and entity labeling
+- Support for predefined and custom entity types
+- Real-time preview of annotations
+- MongoDB backend for persistent storage
+- Modern React frontend with Material-UI
 
-### `npm start`
+## Project Structure
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+```
+ner-annotation-tool/
+├── backend/
+│   ├── main.py
+│   ├── requirements.txt
+│   └── .env.example
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── AnnotationTool.js
+│   │   │   ├── DocumentList.js
+│   │   │   └── Navbar.js
+│   │   ├── App.js
+│   │   └── index.js
+│   └── package.json
+└── README.md
+```
 
-The page will reload if you make edits.\
-You will also see any lint errors in the console.
+## Setup Instructions
 
-### `npm test`
+### Backend Setup
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+1. Create a virtual environment and activate it:
+   ```bash
+   cd backend
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
 
-### `npm run build`
+2. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+3. Create a `.env` file from `.env.example` and update the MongoDB connection string:
+   ```bash
+   cp .env.example .env
+   ```
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+4. Run the backend server:
+   ```bash
+   uvicorn main:app --reload
+   ```
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+### Frontend Setup
 
-### `npm run eject`
+1. Install dependencies:
+   ```bash
+   cd frontend
+   npm install
+   ```
 
-**Note: this is a one-way operation. Once you `eject`, you can’t go back!**
+2. Start the development server:
+   ```bash
+   npm start
+   ```
 
-If you aren’t satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+## Usage
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you’re on your own.
+1. Open your browser and navigate to `http://localhost:3000`
+2. Click "Add New Document" to create a new document for annotation
+3. Click on any document to start annotating
+4. Select text and choose an entity type to create annotations
+5. View and manage your annotations in the entities list
 
-You don’t have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn’t feel obligated to use this feature. However we understand that this tool wouldn’t be useful if you couldn’t customize it when you are ready for it.
+## API Endpoints
 
-## Learn More
+- `GET /documents/`: List all documents
+- `POST /documents/`: Create a new document
+- `GET /documents/{id}`: Get a specific document
+- `PUT /documents/{id}`: Update a document with annotations
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+## Technologies Used
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+- Backend:
+  - FastAPI
+  - MongoDB (with Motor for async operations)
+  - Python 3.8+
+
+- Frontend:
+  - React 18
+  - Material-UI
+  - React Router
+  - Axios
+
+## Contributing
+
+Feel free to submit issues, fork the repository, and create pull requests for any improvements.
