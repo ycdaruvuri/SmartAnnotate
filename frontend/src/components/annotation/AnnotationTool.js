@@ -441,7 +441,7 @@ const AnnotationTool = () => {
   const hasUnsavedChanges = unsavedDocuments.has(documentId);
 
   const handleBack = () => {
-    if (hasUnsavedChanges) {
+    if (unsavedDocuments.size > 0) {
       setShowExitDialog(true);
       setPendingNavigation(() => () => navigate(`/projects/${docData.project_id}`));
     } else {
@@ -449,59 +449,57 @@ const AnnotationTool = () => {
     }
   };
 
-  useEffect(() => {
-    const handleBeforeUnload = (e) => {
-      if (unsavedDocuments.size > 0) {
-        e.preventDefault();
-        e.returnValue = '';
-      }
-    };
+  const useBlockNavigation = (shouldBlock) => {
+    const navigate = useNavigate();
+    
+    useEffect(() => {
+      if (!shouldBlock) return;
 
-    const unblock = () => {
-      if (pendingNavigation) {
-        navigate(pendingNavigation);
-        setPendingNavigation(null);
-      }
-    };
+      const unloadCallback = (event) => {
+        event.preventDefault();
+        event.returnValue = "";
+        return "";
+      };
 
-    const handleLocationChange = () => {
-      const currentPath = location.pathname;
-      if (!currentPath.includes('/annotate') && unsavedDocuments.size > 0) {
-        setShowExitDialog(true);
-        return false;
-      }
-      return true;
-    };
+      window.addEventListener("beforeunload", unloadCallback);
+      return () => window.removeEventListener("beforeunload", unloadCallback);
+    }, [shouldBlock]);
+  };
 
-    window.addEventListener('beforeunload', handleBeforeUnload);
-
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
-  }, [unsavedDocuments, location, navigate, pendingNavigation]);
+  useBlockNavigation(unsavedDocuments.size > 0);
 
   const handleNavigationAttempt = (path) => {
-    if (!path.includes('/annotate') && unsavedDocuments.size > 0) {
-      setPendingNavigation(path);
+    if (unsavedDocuments.size > 0) {
       setShowExitDialog(true);
-      return;
+      setPendingNavigation(() => () => navigate(path));
+      return false;
     }
-    navigate(path);
+    return true;
   };
+
+  useEffect(() => {
+    return () => {
+      // Cleanup any pending navigation when component unmounts
+      setPendingNavigation(null);
+      setShowExitDialog(false);
+    };
+  }, []);
 
   const handleExitConfirm = async (shouldSave) => {
     try {
       if (shouldSave) {
         await handleSaveAll();
       }
-      setShowExitDialog(false);
+      
       if (pendingNavigation) {
-        navigate(pendingNavigation);
-        setPendingNavigation(null);
+        pendingNavigation();
       }
     } catch (error) {
       console.error('Error during exit:', error);
-      toast.error('Failed to save changes');
+      toast.error('Failed to save changes before exit');
+    } finally {
+      setShowExitDialog(false);
+      setPendingNavigation(null);
     }
   };
 
@@ -786,26 +784,13 @@ const AnnotationTool = () => {
             Cancel
           </Button>
           <Button 
-            onClick={() => {
-              if (pendingNavigation) {
-                pendingNavigation();
-              }
-              setShowExitDialog(false);
-              setPendingNavigation(null);
-            }}
+            onClick={() => handleExitConfirm(false)}
           >
             Don't Save
           </Button>
           <Button
             variant="contained"
-            onClick={async () => {
-              await handleSaveAll();
-              if (pendingNavigation) {
-                pendingNavigation();
-              }
-              setShowExitDialog(false);
-              setPendingNavigation(null);
-            }}
+            onClick={() => handleExitConfirm(true)}
           >
             Save & Exit
           </Button>
