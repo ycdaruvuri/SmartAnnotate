@@ -48,7 +48,9 @@ export const getProject = async (projectId) => {
 
 export const updateProject = async (projectId, projectData) => {
   try {
+    console.log('Updating project:', projectId, 'with data:', projectData);
     const response = await axios.put(`${API_URL}/projects/${projectId}`, projectData);
+    console.log('Project update response:', response.data);
     return response.data;
   } catch (error) {
     console.error('Error updating project:', error);

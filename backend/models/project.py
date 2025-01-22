@@ -21,3 +21,6 @@ class ProjectUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     entity_classes: Optional[List[EntityClass]] = None
+
+class ProjectResponse(Project):
+    updated_documents_count: Optional[int] = None

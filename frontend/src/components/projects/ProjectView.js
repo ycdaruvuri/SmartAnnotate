@@ -138,13 +138,36 @@ const ProjectView = () => {
 
   const handleSaveProject = async () => {
     try {
-      await updateProject(projectId, editedProject);
+      setLoading(true);
+      const updatedProject = {
+        name: project.name,
+        description: project.description,
+        entity_classes: project.entity_classes
+      };
+      
+      console.log('Saving project with data:', updatedProject);
+      const response = await updateProject(project.id, updatedProject);
+      console.log('Project update response:', response);
+      
+      // Get the number of updated documents
+      const updatedCount = response?.updated_documents_count;
+      console.log('Updated documents count:', updatedCount);
+      
+      // Show success message with the count of updated documents
+      if (updatedCount > 0) {
+        toast.success(`Successfully updated entity name in ${updatedCount} document${updatedCount === 1 ? '' : 's'}`);
+      } else {
+        toast.success('Project updated successfully');
+      }
+      
+      // Refresh data
       await refreshData();
       setEditDialogOpen(false);
-      toast.success('Project updated successfully');
     } catch (error) {
-      console.error('Error updating project:', error);
-      toast.error('Failed to update project');
+      console.error('Error saving project:', error);
+      toast.error('Error saving project');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -277,57 +300,12 @@ const ProjectView = () => {
         )
       };
 
-      // Update the project first
-      await updateProject(projectId, updatedProject);
-
-      // Get ALL documents in the project by setting limit to -1
-      const projectDocs = await getProjectDocuments(projectId, { skip: 0, limit: -1 });
-      console.log('Total documents to process:', projectDocs.length);
-
-      // Update entity name in all documents that have annotations
-      let updatedCount = 0;
-      const updatePromises = projectDocs.map(async (doc) => {
-        if (!doc.annotations || doc.annotations.length === 0) return;
-
-        // Check if this document has any annotations with the old entity name
-        const hasOldEntity = doc.annotations.some(ann => ann.entity === entity.name);
-        if (!hasOldEntity) return;
-
-        const updatedAnnotations = doc.annotations.map(annotation => {
-          if (annotation.entity === entity.name) {
-            return {
-              ...annotation,
-              entity: newName,
-              text: annotation.text
-            };
-          }
-          return annotation;
-        });
-
-        console.log(`Updating document ${doc.id}:`);
-        console.log('- Old annotations:', doc.annotations);
-        console.log('- New annotations:', updatedAnnotations);
-        
-        try {
-          await updateDocument(doc.id, {
-            annotations: updatedAnnotations,
-            entities: updatedAnnotations.map(ann => ({
-              start: ann.start_index,
-              end: ann.end_index,
-              label: ann.entity,
-              text: ann.text
-            }))
-          });
-          updatedCount++;
-          console.log(`✓ Successfully updated document ${doc.id}`);
-        } catch (error) {
-          console.error(`× Failed to update document ${doc.id}:`, error);
-        }
-      });
-
-      // Wait for all document updates to complete
-      await Promise.all(updatePromises);
-      console.log(`Updated ${updatedCount} documents with the new entity name`);
+      // Update the project and get the response with updated document count
+      const response = await updateProject(projectId, updatedProject);
+      console.log('Project update response:', response);
+      
+      const updatedCount = response?.updated_documents_count || 0;
+      console.log('Updated documents count:', updatedCount);
 
       // Update local state
       setEditedProject(updatedProject);
@@ -337,7 +315,7 @@ const ProjectView = () => {
       const updatedDocs = await getProjectDocuments(projectId, { skip: 0, limit: -1 });
       setDocuments(updatedDocs);
       
-      toast.success(`Successfully updated entity name in ${updatedCount} documents`);
+      toast.success(`Successfully updated entity name in ${updatedCount} document${updatedCount === 1 ? '' : 's'}`);
     } catch (error) {
       console.error('Error updating entity name:', error);
       toast.error('Failed to update entity name');

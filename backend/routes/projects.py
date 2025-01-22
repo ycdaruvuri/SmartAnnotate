@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
-from models.project import ProjectCreate, Project, ProjectUpdate
+from models.project import ProjectCreate, Project, ProjectUpdate, ProjectResponse
 from utils.auth import get_current_user
 from config.database import projects_collection, documents_collection
 from bson import ObjectId
@@ -68,7 +68,7 @@ async def get_project_documents(
     
     return documents
 
-@router.put("/{project_id}", response_model=Project)
+@router.put("/{project_id}", response_model=ProjectResponse)
 async def update_project(
     project_id: str,
     project_update: ProjectUpdate,
@@ -85,11 +85,15 @@ async def update_project(
         
         update_data = project_update.dict(exclude_unset=True)
         update_data["updated_at"] = datetime.utcnow()
+        total_updated_docs = 0
         
         # Check if entity classes have been updated
         if "entity_classes" in update_data:
+            print("Checking for entity updates...")
             old_entities = {e["name"]: e for e in current_project.get("entity_classes", [])}
             new_entities = {e["name"]: e for e in update_data["entity_classes"]}
+            print(f"Old entities: {old_entities.keys()}")
+            print(f"New entities: {new_entities.keys()}")
             
             # Find renamed entities
             for old_name, old_entity in old_entities.items():
@@ -100,6 +104,16 @@ async def update_project(
                             # Found a potential rename (old_name -> new_name)
                             print(f"Detected entity rename: {old_name} -> {new_name}")
                             
+                            # Count documents that need updating
+                            matching_docs = documents_collection.count_documents({
+                                "project_id": str(project_id),
+                                "$or": [
+                                    {"annotations.entity": old_name},
+                                    {"entities.label": old_name}
+                                ]
+                            })
+                            print(f"Found {matching_docs} documents to update")
+                            
                             # Update all documents that use this entity
                             docs_cursor = documents_collection.find({
                                 "project_id": str(project_id),
@@ -109,35 +123,45 @@ async def update_project(
                                 ]
                             })
                             
+                            updated_docs = 0
                             for doc in docs_cursor:
                                 try:
+                                    needs_update = False
                                     # Update annotations
                                     if "annotations" in doc:
                                         for ann in doc["annotations"]:
                                             if ann["entity"] == old_name:
                                                 ann["entity"] = new_name
+                                                needs_update = True
                                     
                                     # Update entities
                                     if "entities" in doc:
                                         for entity in doc["entities"]:
                                             if entity["label"] == old_name:
                                                 entity["label"] = new_name
+                                                needs_update = True
                                     
-                                    # Save the updated document
-                                    documents_collection.update_one(
-                                        {"_id": doc["_id"]},
-                                        {
-                                            "$set": {
-                                                "annotations": doc["annotations"],
-                                                "entities": doc["entities"],
-                                                "updated_at": datetime.utcnow()
+                                    # Save the updated document only if changes were made
+                                    if needs_update:
+                                        update_result = documents_collection.update_one(
+                                            {"_id": doc["_id"]},
+                                            {
+                                                "$set": {
+                                                    "annotations": doc["annotations"],
+                                                    "entities": doc["entities"],
+                                                    "updated_at": datetime.utcnow()
+                                                }
                                             }
-                                        }
-                                    )
-                                    print(f"Updated document {doc['_id']} with new entity name")
+                                        )
+                                        if update_result.modified_count > 0:
+                                            updated_docs += 1
+                                            print(f"Updated document {doc['_id']} with new entity name")
                                 except Exception as doc_error:
                                     print(f"Error updating document {doc['_id']}: {str(doc_error)}")
                                     continue
+                            
+                            total_updated_docs += updated_docs
+                            print(f"Updated {updated_docs} documents for entity rename {old_name} -> {new_name}")
                             break
         
         # Update the project
@@ -153,8 +177,21 @@ async def update_project(
         if not result:
             raise HTTPException(status_code=404, detail="Project not found after update")
         
-        result["id"] = str(result.pop("_id"))
-        return Project(**result)
+        # Create response with updated document count
+        response_data = {
+            "id": str(result["_id"]),
+            "name": result["name"],
+            "description": result.get("description"),
+            "entity_classes": result.get("entity_classes", []),
+            "user_id": result["user_id"],
+            "created_at": result["created_at"],
+            "updated_at": result["updated_at"],
+            "updated_documents_count": total_updated_docs
+        }
+        
+        print(f"Sending response with total_updated_docs: {total_updated_docs}")
+        print(f"Response data: {response_data}")
+        return ProjectResponse(**response_data)
         
     except Exception as e:
         print(f"Error updating project: {str(e)}")
