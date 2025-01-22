@@ -57,7 +57,8 @@ import {
   exportProjectData,
   createDocument,
   updateDocument,
-  bulkDeleteDocuments
+  bulkDeleteDocuments,
+  deleteProject
 } from '../../utils/api';
 
 const COLOR_PALETTE = [
@@ -92,6 +93,7 @@ const ProjectView = () => {
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [selectedDocuments, setSelectedDocuments] = useState([]);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showDeleteProjectDialog, setShowDeleteProjectDialog] = useState(false);
 
   useEffect(() => {
     let isSubscribed = true;
@@ -398,6 +400,18 @@ const ProjectView = () => {
     }
   };
 
+  const handleDeleteProject = async () => {
+    try {
+      await deleteProject(projectId);
+      toast.success('Project deleted successfully');
+      navigate('/projects'); // Navigate back to projects list
+    } catch (error) {
+      console.error('Error deleting project:', error);
+      toast.error('Failed to delete project');
+    }
+    setShowDeleteProjectDialog(false);
+  };
+
   if (loading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
@@ -423,8 +437,16 @@ const ProjectView = () => {
             <Button
               startIcon={<DownloadIcon />}
               onClick={handleExport}
+              sx={{ mr: 1 }}
             >
               Export
+            </Button>
+            <Button
+              startIcon={<DeleteIcon />}
+              color="error"
+              onClick={() => setShowDeleteProjectDialog(true)}
+            >
+              Delete Project
             </Button>
           </Box>
         </Box>
@@ -845,6 +867,25 @@ const ProjectView = () => {
           <Button onClick={() => setShowDeleteDialog(false)}>Cancel</Button>
           <Button onClick={handleDeleteConfirm} color="error" variant="contained">
             Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Project Confirmation Dialog */}
+      <Dialog
+        open={showDeleteProjectDialog}
+        onClose={() => setShowDeleteProjectDialog(false)}
+      >
+        <DialogTitle>Delete Project</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete this project? This action will permanently delete the project and all its associated documents. This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowDeleteProjectDialog(false)}>Cancel</Button>
+          <Button onClick={handleDeleteProject} color="error" variant="contained">
+            Delete Project
           </Button>
         </DialogActions>
       </Dialog>

@@ -58,6 +58,15 @@ export const updateProject = async (projectId, projectData) => {
   }
 };
 
+export const deleteProject = async (projectId) => {
+  try {
+    const response = await axios.delete(`${API_URL}/projects/${projectId}`);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
 // Document APIs
 export const createDocument = async (documentData) => {
   try {

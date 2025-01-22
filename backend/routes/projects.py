@@ -199,12 +199,23 @@ async def update_project(
 
 @router.delete("/{project_id}")
 async def delete_project(project_id: str, current_user = Depends(get_current_user)):
-    result = projects_collection.delete_one({
-        "_id": ObjectId(project_id),
-        "user_id": str(current_user["_id"])
-    })
-    
-    if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Project not found")
-    
-    return {"message": "Project deleted successfully"}
+    try:
+        # Convert string ID to ObjectId
+        project_obj_id = ObjectId(project_id)
+        
+        # Delete all documents associated with this project first
+        docs_result = documents_collection.delete_many({"project_id": project_id})
+        
+        # Delete the project
+        project_result = projects_collection.delete_one({"_id": project_obj_id})
+        
+        if project_result.deleted_count == 0:
+            raise HTTPException(status_code=404, detail="Project not found")
+            
+        return {
+            "message": f"Project and {docs_result.deleted_count} associated documents deleted successfully"
+        }
+        
+    except Exception as e:
+        print(f"Error deleting project: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
