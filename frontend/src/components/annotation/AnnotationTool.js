@@ -115,20 +115,47 @@ const AnnotationTool = () => {
 
   useEffect(() => {
     if (docData) {
-      // Initialize document changes with existing annotations
+      // Store the initial entities when document loads
       setDocumentChanges(prev => {
         const newMap = new Map(prev);
         if (!newMap.has(documentId)) {
           newMap.set(documentId, {
-            entities: docData.entities || [],
-            annotations: docData.annotations || []
+            originalEntities: [...entities],
+            currentEntities: [...entities]
           });
         }
         return newMap;
       });
-      setIsComplete(docData.status === 'completed');
     }
-  }, [docData, documentId]);
+  }, [docData, documentId, entities]);
+
+  useEffect(() => {
+    if (documentChanges.has(documentId)) {
+      setDocumentChanges(prev => {
+        const newMap = new Map(prev);
+        const docChange = newMap.get(documentId);
+        newMap.set(documentId, {
+          ...docChange,
+          currentEntities: [...entities]
+        });
+        return newMap;
+      });
+
+      // Check if entities have changed from original
+      const docChange = documentChanges.get(documentId);
+      const hasChanged = JSON.stringify(docChange.originalEntities) !== JSON.stringify(entities);
+      
+      setUnsavedDocuments(prev => {
+        const newSet = new Set(prev);
+        if (hasChanged) {
+          newSet.add(documentId);
+        } else {
+          newSet.delete(documentId);
+        }
+        return newSet;
+      });
+    }
+  }, [entities, documentId]);
 
   const handleKeyPress = useCallback((e) => {
     if (e.key >= '1' && e.key <= '9') {
@@ -159,29 +186,7 @@ const AnnotationTool = () => {
     const newEntities = [...entities];
     newEntities.splice(index, 1);
     setEntities(newEntities);
-    
-    setDocumentChanges(prev => {
-      const formattedEntities = newEntities.map(entity => ({
-        start: entity.start,
-        end: entity.end,
-        label: entity.label,
-        text: entity.text
-      }));
-
-      const formattedAnnotations = newEntities.map(entity => ({
-        start_index: entity.start,
-        end_index: entity.end,
-        entity: entity.label,
-        text: entity.text
-      }));
-
-      return new Map(prev).set(documentId, {
-        entities: formattedEntities,
-        annotations: formattedAnnotations
-      });
-    });
-    setUnsavedDocuments(prev => new Set(prev).add(documentId));
-  }, [entities, documentId]);
+  }, [entities]);
 
   const handleClassChange = useCallback((entityClass) => {
     if (focusedEntityIndex !== null) {
@@ -203,7 +208,8 @@ const AnnotationTool = () => {
     if (!selectedEntity) return;
 
     const selection = window.getSelection();
-    if (!selection.toString().trim()) return;
+    const selectedText = selection.toString().trim();
+    if (!selectedText) return;
 
     const range = selection.getRangeAt(0);
     const textContent = textContentRef.current;
@@ -216,78 +222,50 @@ const AnnotationTool = () => {
     preSelectionRange.selectNodeContents(textContent);
     preSelectionRange.setEnd(range.startContainer, range.startOffset);
     const start = preSelectionRange.toString().length;
+    const end = start + selectedText.length;
 
-    const end = start + range.toString().length;
+    // Check for overlapping or duplicate selections
+    const hasOverlap = entities.some(entity => {
+      // Check if the new selection overlaps with any existing entity
+      const overlaps = (
+        (start >= entity.start && start < entity.end) || // Start point overlaps
+        (end > entity.start && end <= entity.end) || // End point overlaps
+        (start <= entity.start && end >= entity.end) // Completely contains existing entity
+      );
+      
+      // Check if it's an exact duplicate
+      const isDuplicate = start === entity.start && end === entity.end;
+      
+      return overlaps || isDuplicate;
+    });
+
+    if (hasOverlap) {
+      toast.warning('Cannot create overlapping or duplicate annotations');
+      selection.removeAllRanges();
+      return;
+    }
 
     const newEntity = {
       start,
       end,
       label: selectedEntity.name,
-      text: selection.toString(),
+      text: selectedText,
       color: selectedEntity.color
     };
 
     console.log('New entity:', newEntity);
-    setEntities(prev => [...prev, newEntity]);
-    selection.removeAllRanges();
-    setUnsavedDocuments(prev => new Set(prev).add(documentId));
-    setDocumentChanges(prev => {
-      const existingChanges = prev.get(documentId) || {
-        entities: [],
-        annotations: []
-      };
-
-      const formattedEntity = {
-        start: newEntity.start,
-        end: newEntity.end,
-        label: newEntity.label,
-        text: newEntity.text
-      };
-
-      const formattedAnnotation = {
-        start_index: newEntity.start,
-        end_index: newEntity.end,
-        entity: newEntity.label,
-        text: newEntity.text
-      };
-
-      return new Map(prev).set(documentId, {
-        entities: [...existingChanges.entities, formattedEntity],
-        annotations: [...existingChanges.annotations, formattedAnnotation]
-      });
+    setEntities(prev => {
+      // Sort entities by start position to maintain order
+      const updated = [...prev, newEntity].sort((a, b) => a.start - b.start);
+      return updated;
     });
-  }, [selectedEntity, documentId]);
+    
+    selection.removeAllRanges();
+  }, [selectedEntity, entities]);
 
   const handleEntitiesChange = useCallback((newEntities) => {
     setEntities(newEntities);
-    // Update document changes while preserving existing annotations
-    setDocumentChanges(prev => {
-      const existingChanges = prev.get(documentId) || {
-        entities: [],
-        annotations: []
-      };
-      
-      const formattedEntities = newEntities.map(entity => ({
-        start: entity.start,
-        end: entity.end,
-        label: entity.label,
-        text: entity.text
-      }));
-
-      const formattedAnnotations = newEntities.map(entity => ({
-        start_index: entity.start,
-        end_index: entity.end,
-        entity: entity.label,
-        text: entity.text
-      }));
-
-      return new Map(prev).set(documentId, {
-        entities: formattedEntities,
-        annotations: formattedAnnotations
-      });
-    });
-    setUnsavedDocuments(prev => new Set(prev).add(documentId));
-  }, [documentId]);
+  }, []);
 
   const handleAddEntity = useCallback((newEntity) => {
     const formattedEntity = {
@@ -297,36 +275,69 @@ const AnnotationTool = () => {
       text: newEntity.text
     };
 
-    const formattedAnnotation = {
-      start_index: newEntity.start,
-      end_index: newEntity.end,
-      entity: newEntity.label,
-      text: newEntity.text
-    };
-
     setEntities(prev => [...prev, newEntity]);
-    setDocumentChanges(prev => {
-      const existingChanges = prev.get(documentId) || {
-        entities: [],
-        annotations: []
-      };
+  }, []);
 
-      return new Map(prev).set(documentId, {
-        entities: [...existingChanges.entities, formattedEntity],
-        annotations: [...existingChanges.annotations, formattedAnnotation]
-      });
-    });
-    setUnsavedDocuments(prev => new Set(prev).add(documentId));
-  }, [documentId]);
-
-  const handleSave = useCallback(async () => {
+  const handleSaveAll = async () => {
     try {
-      const changes = documentChanges.get(documentId);
-      if (!changes) return;
+      setLoading(true);
+      const promises = Array.from(unsavedDocuments).map(async (docId) => {
+        const changes = documentChanges.get(docId);
+        if (!changes) return;
+
+        const annotations = changes.currentEntities.map(entity => ({
+          start_index: entity.start,
+          end_index: entity.end,
+          entity: entity.label,
+          text: entity.text
+        }));
+
+        await updateDocument(docId, {
+          annotations,
+          text: docData.text,
+          project_id: docData.project_id,
+          status: docData.status
+        });
+      });
+
+      await Promise.all(promises);
+      setUnsavedDocuments(new Set());
+      toast.success('All changes saved successfully');
+    } catch (error) {
+      console.error('Error saving changes:', error);
+      toast.error('Failed to save changes');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!unsavedDocuments.has(documentId)) return;
+
+    try {
+      setLoading(true);
+      const annotations = entities.map(entity => ({
+        start_index: entity.start,
+        end_index: entity.end,
+        entity: entity.label,
+        text: entity.text
+      }));
 
       await updateDocument(documentId, {
-        entities: changes.entities,
-        annotations: changes.annotations
+        annotations,
+        text: docData.text,
+        project_id: docData.project_id,
+        status: docData.status
+      });
+
+      // Update document changes after successful save
+      setDocumentChanges(prev => {
+        const newMap = new Map(prev);
+        newMap.set(documentId, {
+          originalEntities: [...entities],
+          currentEntities: [...entities]
+        });
+        return newMap;
       });
 
       setUnsavedDocuments(prev => {
@@ -334,47 +345,15 @@ const AnnotationTool = () => {
         newSet.delete(documentId);
         return newSet;
       });
-      setDocumentChanges(prev => {
-        const newMap = new Map(prev);
-        newMap.delete(documentId);
-        return newMap;
-      });
+
       toast.success('Changes saved successfully');
     } catch (error) {
-      console.error('Error saving annotations:', error);
-      toast.error('Failed to save annotations');
+      console.error('Error saving changes:', error);
+      toast.error('Failed to save changes');
+    } finally {
+      setLoading(false);
     }
-  }, [documentId, documentChanges]);
-
-  const handleSaveAll = useCallback(async () => {
-    try {
-      const unsavedDocIds = Array.from(unsavedDocuments);
-      
-      await Promise.all(
-        unsavedDocIds.map(async (docId) => {
-          const changes = documentChanges.get(docId);
-          if (changes) {
-            await updateDocument(docId, {
-              entities: changes.entities,
-              annotations: changes.annotations
-            });
-          }
-        })
-      );
-
-      setUnsavedDocuments(new Set());
-      setDocumentChanges(new Map());
-      toast.success('All documents saved successfully');
-      
-      if (pendingNavigation) {
-        navigate(pendingNavigation);
-        setPendingNavigation(null);
-      }
-    } catch (error) {
-      console.error('Error saving all documents:', error);
-      toast.error('Failed to save all documents');
-    }
-  }, [unsavedDocuments, documentChanges, pendingNavigation, navigate]);
+  };
 
   const handleMarkComplete = async () => {
     setIsComplete(!isComplete);
@@ -612,7 +591,7 @@ const AnnotationTool = () => {
                 startIcon={<SaveIcon />}
                 onClick={handleSaveAll}
               >
-                Save All
+                Save All ({unsavedDocuments.size})
               </Button>
             )}
             <Button
