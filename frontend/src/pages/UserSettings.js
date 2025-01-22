@@ -11,7 +11,11 @@ import {
   Divider,
   Alert,
   IconButton,
-  InputAdornment
+  InputAdornment,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions
 } from '@mui/material';
 import { Visibility, VisibilityOff, PhotoCamera } from '@mui/icons-material';
 import axios from 'axios';
@@ -37,6 +41,8 @@ const UserSettings = () => {
   });
   const [message, setMessage] = useState({ type: '', text: '' });
   const [previewImage, setPreviewImage] = useState(null);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [openConfirmDialog, setOpenConfirmDialog] = useState(false);
 
   useEffect(() => {
     fetchProfile();
@@ -98,12 +104,19 @@ const UserSettings = () => {
     }
   };
 
-  const handleImageUpload = async (e) => {
+  const handleImageSelect = (e) => {
     const file = e.target.files[0];
     if (file) {
+      setSelectedFile(file);
       setPreviewImage(URL.createObjectURL(file));
+      setOpenConfirmDialog(true);
+    }
+  };
+
+  const handleImageUpload = async () => {
+    if (selectedFile) {
       const formData = new FormData();
-      formData.append('profile_picture', file);
+      formData.append('profile_picture', selectedFile);
       
       try {
         const response = await axios.put(`${API_URL}/api/users/profile`, formData, {
@@ -112,13 +125,24 @@ const UserSettings = () => {
           },
         });
         setMessage({ type: 'success', text: response.data.message });
+        setOpenConfirmDialog(false);
       } catch (error) {
         setMessage({ 
           type: 'error', 
           text: error.response?.data?.detail || 'Failed to update profile picture' 
         });
+        setOpenConfirmDialog(false);
+        // Reset preview if upload fails
+        fetchProfile();
       }
     }
+  };
+
+  const handleCancelUpload = () => {
+    setOpenConfirmDialog(false);
+    setSelectedFile(null);
+    // Reset preview to current profile picture
+    fetchProfile();
   };
 
   const togglePasswordVisibility = (field) => {
@@ -145,7 +169,7 @@ const UserSettings = () => {
                 accept="image/*"
                 type="file"
                 id="icon-button-file"
-                onChange={handleImageUpload}
+                onChange={handleImageSelect}
                 style={{ display: 'none' }}
               />
               <label htmlFor="icon-button-file">
@@ -274,6 +298,28 @@ const UserSettings = () => {
           </Paper>
         </Grid>
       </Grid>
+
+      {/* Confirmation Dialog */}
+      <Dialog open={openConfirmDialog} onClose={handleCancelUpload}>
+        <DialogTitle>Update Profile Picture</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to update your profile picture?
+          </Typography>
+          <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>
+            <Avatar
+              src={previewImage}
+              sx={{ width: 200, height: 200 }}
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCancelUpload}>Cancel</Button>
+          <Button onClick={handleImageUpload} variant="contained" color="primary">
+            Update
+          </Button>
+        </DialogActions>
+      </Dialog>
     </PageLayout>
   );
 };
