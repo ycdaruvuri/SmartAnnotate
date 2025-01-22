@@ -174,7 +174,7 @@ const ProjectView = () => {
 
   const handleRandomColor = (entity) => {
     const usedColors = editedProject.entity_classes.map(e => e.color);
-    const randomColor = getRandomUnusedColor(usedColors);
+    let randomColor = getRandomUnusedColor(usedColors);
 
     // Validate that the color is in the palette
     if (!COLOR_PALETTE.includes(randomColor)) {
@@ -182,7 +182,14 @@ const ProjectView = () => {
       randomColor = COLOR_PALETTE[0];
     }
 
-    handleChangeEntityColor(entity, randomColor);
+    const updatedEntities = editedProject.entity_classes.map(e => 
+      e === entity ? { ...e, color: randomColor } : e
+    );
+
+    setEditedProject({
+      ...editedProject,
+      entity_classes: updatedEntities
+    });
   };
 
   const handleRemoveEntity = (entityName) => {
@@ -503,33 +510,47 @@ const ProjectView = () => {
       </Dialog>
 
       {/* Edit Project Dialog */}
-      <Dialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Edit Project Settings</DialogTitle>
+      <Dialog 
+        open={editDialogOpen} 
+        onClose={() => setEditDialogOpen(false)} 
+        maxWidth="sm" 
+        fullWidth
+        disablePortal={false}
+        keepMounted={false}
+        aria-labelledby="edit-project-dialog-title"
+      >
+        <DialogTitle id="edit-project-dialog-title">Edit Project Settings</DialogTitle>
         <DialogContent>
           <TextField
             autoFocus
             margin="dense"
+            id="project-name"
+            name="project-name"
             label="Project Name"
             fullWidth
             value={editedProject.name}
             onChange={(e) => setEditedProject({ ...editedProject, name: e.target.value })}
+            inputProps={{ 'aria-label': 'Project name' }}
           />
           <TextField
             margin="dense"
+            id="project-description"
+            name="project-description"
             label="Description"
             fullWidth
             multiline
             rows={3}
             value={editedProject.description}
             onChange={(e) => setEditedProject({ ...editedProject, description: e.target.value })}
+            inputProps={{ 'aria-label': 'Project description' }}
           />
 
           <Typography variant="h6" sx={{ mt: 3, mb: 2 }}>
             Entity Classes
           </Typography>
 
-          <List>
-            {editedProject.entity_classes.map((entity) => (
+          <List aria-label="Entity classes list">
+            {editedProject.entity_classes.map((entity, index) => (
               <ListItem
                 key={entity.name}
                 sx={{
@@ -544,6 +565,8 @@ const ProjectView = () => {
                   <>
                     <TextField
                       size="small"
+                      id={`edit-entity-${index}`}
+                      name={`edit-entity-${index}`}
                       value={editingEntityName}
                       onChange={(e) => setEditingEntityName(e.target.value)}
                       onKeyPress={(e) => {
@@ -553,37 +576,98 @@ const ProjectView = () => {
                         }
                       }}
                       sx={{ flexGrow: 1 }}
+                      inputProps={{ 'aria-label': 'Edit entity name' }}
                     />
                     <Button
                       size="small"
                       onClick={handleEditEntitySave}
                       sx={{ ml: 1 }}
+                      aria-label="Save entity name"
                     >
                       Save
                     </Button>
                   </>
                 ) : (
                   <>
-                    <Typography sx={{ flexGrow: 1 }}>{entity.name}</Typography>
+                    <Box 
+                      sx={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        flexGrow: 1,
+                        gap: 2 
+                      }}
+                    >
+                      <Box 
+                        sx={{ 
+                          width: 24, 
+                          height: 24, 
+                          borderRadius: '50%', 
+                          bgcolor: entity.color,
+                          border: '1px solid',
+                          borderColor: 'divider'
+                        }} 
+                      />
+                      <Typography>{entity.name}</Typography>
+                    </Box>
                     <Box display="flex" alignItems="center">
                       <Select
                         size="small"
+                        id={`entity-color-${index}`}
+                        name={`entity-color-${index}`}
                         value={COLOR_PALETTE.includes(entity.color) ? entity.color : COLOR_PALETTE[0]}
                         onChange={(e) => handleChangeEntityColor(entity, e.target.value)}
-                        sx={{ width: 100, mr: 1 }}
+                        sx={{ 
+                          width: 100, 
+                          mr: 1,
+                          '& .MuiSelect-select': {
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 1
+                          }
+                        }}
+                        aria-label={`Select color for ${entity.name}`}
+                        renderValue={(selected) => (
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Box 
+                              sx={{ 
+                                width: 16, 
+                                height: 16, 
+                                borderRadius: '50%', 
+                                bgcolor: selected,
+                                border: '1px solid',
+                                borderColor: 'divider'
+                              }} 
+                            />
+                            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                              {selected}
+                            </Typography>
+                          </Box>
+                        )}
                       >
                         {COLOR_PALETTE.map((color) => (
                           <MenuItem 
                             key={color} 
                             value={color}
                             sx={{ 
-                              bgcolor: color,
-                              '&:hover': { bgcolor: color },
-                              '&.Mui-selected': { bgcolor: color },
-                              '&.Mui-selected:hover': { bgcolor: color }
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 1
                             }}
+                            aria-label={`Color ${color}`}
                           >
-                            &nbsp;
+                            <Box 
+                              sx={{ 
+                                width: 16, 
+                                height: 16, 
+                                borderRadius: '50%', 
+                                bgcolor: color,
+                                border: '1px solid',
+                                borderColor: 'divider'
+                              }} 
+                            />
+                            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                              {color}
+                            </Typography>
                           </MenuItem>
                         ))}
                       </Select>
@@ -592,18 +676,21 @@ const ProjectView = () => {
                         onClick={() => handleRandomColor(entity)}
                         title="Pick random color"
                         sx={{ mr: 1 }}
+                        aria-label={`Pick random color for ${entity.name}`}
                       >
                         <PaletteIcon />
                       </IconButton>
                       <IconButton
                         size="small"
                         onClick={() => handleEditEntityStart(entity)}
+                        aria-label={`Edit ${entity.name}`}
                       >
                         <EditIcon />
                       </IconButton>
                       <IconButton
                         size="small"
                         onClick={() => handleRemoveEntity(entity.name)}
+                        aria-label={`Remove ${entity.name}`}
                       >
                         <DeleteIcon />
                       </IconButton>
@@ -618,6 +705,8 @@ const ProjectView = () => {
             <TextField
               label="New Entity Name"
               size="small"
+              id="new-entity-name"
+              name="new-entity-name"
               value={newEntity.name}
               onChange={(e) => setNewEntity({ ...newEntity, name: e.target.value })}
               onKeyPress={(e) => {
@@ -626,20 +715,22 @@ const ProjectView = () => {
                   handleAddEntity();
                 }
               }}
+              inputProps={{ 'aria-label': 'New entity name' }}
             />
             <Button
               variant="contained"
               size="small"
               onClick={handleAddEntity}
               disabled={!newEntity.name.trim()}
+              aria-label="Add new entity"
             >
               Add Entity
             </Button>
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setEditDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleSaveProject} variant="contained">
+          <Button onClick={() => setEditDialogOpen(false)} aria-label="Cancel editing project">Cancel</Button>
+          <Button onClick={handleSaveProject} variant="contained" aria-label="Save project changes">
             Save Changes
           </Button>
         </DialogActions>

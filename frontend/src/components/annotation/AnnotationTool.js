@@ -456,23 +456,35 @@ const AnnotationTool = () => {
         </Paper>
       </Paper>
 
-      <Dialog open={openConfirm} onClose={() => setOpenConfirm(false)}>
-        <DialogTitle>Save Changes</DialogTitle>
+      <Dialog
+        open={openConfirm}
+        onClose={() => setOpenConfirm(false)}
+        aria-labelledby="save-dialog-title"
+        disablePortal={false}
+        keepMounted={false}
+      >
+        <DialogTitle id="save-dialog-title">Save Changes</DialogTitle>
         <DialogContent>
           <Typography>
-            Do you want to save your annotations?
+            Do you want to save your changes before moving to the next document?
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => {
-            setOpenConfirm(false);
-            if (nextDocId) {
-              navigate(`/annotate/${nextDocId}`);
-            }
-          }}>
+          <Button 
+            onClick={() => {
+              setOpenConfirm(false);
+              if (nextDocId) navigate(`/annotate/${nextDocId}`);
+            }}
+            aria-label="Discard changes and continue"
+          >
             Don't Save
           </Button>
-          <Button onClick={handleSave} variant="contained">
+          <Button 
+            onClick={handleSave} 
+            variant="contained" 
+            color="primary"
+            aria-label="Save changes and continue"
+          >
             Save
           </Button>
         </DialogActions>
