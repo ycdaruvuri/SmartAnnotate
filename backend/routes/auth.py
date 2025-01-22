@@ -20,18 +20,30 @@ async def register(user: UserCreate):
     # Check if user already exists
     if users_collection.find_one({"email": user.email}):
         raise HTTPException(status_code=400, detail="Email already registered")
+    if users_collection.find_one({"username": user.username}):
+        raise HTTPException(status_code=400, detail="Username already taken")
     
-    # Create new user
-    user_dict = user.dict()
-    user_dict["password"] = get_password_hash(user.password)
-    user_dict["created_at"] = datetime.utcnow()
+    # Create new user with empty strings for optional fields
+    user_dict = {
+        "email": user.email,
+        "username": user.username,
+        "password": get_password_hash(user.password),
+        "created_at": datetime.utcnow(),
+        "about_me": "",
+        "profile_picture": "",
+        "updated_at": None
+    }
     
     result = users_collection.insert_one(user_dict)
-    user_dict["id"] = str(result.inserted_id)
     
-    # Remove password from response
-    del user_dict["password"]
-    return UserResponse(**user_dict)
+    return {
+        "_id": str(result.inserted_id),
+        "email": user.email,
+        "username": user.username,
+        "created_at": user_dict["created_at"],
+        "about_me": "",
+        "profile_picture": ""
+    }
 
 @router.post("/token")
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
