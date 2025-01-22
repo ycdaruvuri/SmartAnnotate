@@ -24,6 +24,14 @@ import {
   ListItemText,
   IconButton,
   DialogContentText,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Checkbox,
+  Tooltip,
 } from '@mui/material';
 import {
   ViewModule as GridViewIcon,
@@ -37,6 +45,7 @@ import {
   Visibility as VisibilityIcon,
   CheckCircle as CheckCircleIcon,
   Circle as CircleIcon,
+  ArrowBack as ArrowBackIcon,
 } from '@mui/icons-material';
 import { ChromePicker } from 'react-color';
 import { toast } from 'react-toastify';
@@ -47,7 +56,8 @@ import {
   uploadDocument, 
   exportProjectData,
   createDocument,
-  updateDocument
+  updateDocument,
+  bulkDeleteDocuments
 } from '../../utils/api';
 
 const COLOR_PALETTE = [
@@ -80,6 +90,8 @@ const ProjectView = () => {
   const [editingEntityName, setEditingEntityName] = useState({ entity: null, name: '' });
   const [documentViewDialogOpen, setDocumentViewDialogOpen] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState(null);
+  const [selectedDocuments, setSelectedDocuments] = useState([]);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   useEffect(() => {
     let isSubscribed = true;
@@ -354,6 +366,38 @@ const ProjectView = () => {
     setDocumentViewDialogOpen(true);
   };
 
+  const handleSelectAll = (event) => {
+    if (event.target.checked) {
+      setSelectedDocuments(documents.map(doc => doc.id));
+    } else {
+      setSelectedDocuments([]);
+    }
+  };
+
+  const handleSelectDocument = (documentId) => {
+    setSelectedDocuments(prev => {
+      if (prev.includes(documentId)) {
+        return prev.filter(id => id !== documentId);
+      } else {
+        return [...prev, documentId];
+      }
+    });
+  };
+
+  const handleDeleteConfirm = async () => {
+    try {
+      await bulkDeleteDocuments(selectedDocuments);
+      setDocuments(prev => prev.filter(doc => !selectedDocuments.includes(doc.id)));
+      setSelectedDocuments([]);
+      toast.success('Documents deleted successfully');
+    } catch (error) {
+      console.error('Error deleting documents:', error);
+      toast.error('Failed to delete documents');
+    } finally {
+      setShowDeleteDialog(false);
+    }
+  };
+
   if (loading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
@@ -438,96 +482,185 @@ const ProjectView = () => {
             >
               Add Document
             </Button>
+            {selectedDocuments.length > 0 && (
+              <Button
+                variant="contained"
+                color="error"
+                startIcon={<DeleteIcon />}
+                onClick={() => setShowDeleteDialog(true)}
+              >
+                Delete Selected ({selectedDocuments.length})
+              </Button>
+            )}
           </Box>
         </Box>
 
         {viewMode === 'grid' ? (
-          <Grid container spacing={3}>
-            {documents.map((doc) => (
-              <Grid item xs={12} sm={6} md={4} key={doc.id}>
-                <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                  <CardContent sx={{ flexGrow: 1 }}>
-                    <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
-                      {doc.text?.substring(0, 200)}
-                      {doc.text?.length > 200 ? '...' : ''}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                      Created: {new Date(doc.created_at).toLocaleDateString()}
-                    </Typography>
-                  </CardContent>
-                  <CardActions sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Box sx={{ display: 'flex', gap: 1 }}>
-                      <Button
-                        size="small"
-                        variant="contained"
-                        onClick={() => navigate(`/annotate/${doc.id}`)}
-                      >
-                        Annotate
-                      </Button>
-                      <Button
-                        size="small"
-                        variant="contained"
-                        onClick={() => handleDocumentView(doc)}
-                      >
-                        View
-                      </Button>
+          <>
+            <Box sx={{ mb: 2, display: 'flex', alignItems: 'center' }}>
+              <Checkbox
+                indeterminate={selectedDocuments.length > 0 && selectedDocuments.length < documents.length}
+                checked={documents.length > 0 && selectedDocuments.length === documents.length}
+                onChange={handleSelectAll}
+              />
+              <Typography variant="body2" sx={{ ml: 1 }}>
+                Select All
+              </Typography>
+            </Box>
+            <Grid container spacing={3}>
+              {documents.map((doc) => (
+                <Grid item xs={12} sm={6} md={4} key={doc.id}>
+                  <Paper 
+                    sx={{ 
+                      p: 2,
+                      height: '100%',
+                      position: 'relative',
+                      border: selectedDocuments.includes(doc.id) ? 2 : 1,
+                      borderColor: selectedDocuments.includes(doc.id) ? 'primary.main' : 'divider',
+                      display: 'flex',
+                      flexDirection: 'column'
+                    }}
+                  >
+                    <Box sx={{ position: 'absolute', top: 8, left: 8, zIndex: 1 }}>
+                      <Checkbox
+                        checked={selectedDocuments.includes(doc.id)}
+                        onChange={() => handleSelectDocument(doc.id)}
+                        onClick={(e) => e.stopPropagation()}
+                      />
                     </Box>
-                    {doc.status === 'completed' ? (
-                      <CheckCircleIcon sx={{ color: '#4caf50', fontSize: 32 }} />
-                    ) : (
-                      <CircleIcon sx={{ color: '#9e9e9e', fontSize: 32 }} />
-                    )}
-                  </CardActions>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
+                    <Box 
+                      sx={{ 
+                        mt: 3, 
+                        flex: 1, 
+                        display: 'flex', 
+                        flexDirection: 'column' 
+                      }}
+                      onClick={() => handleSelectDocument(doc.id)}
+                    >
+                      <Typography 
+                        variant="body2" 
+                        color="text.secondary" 
+                        sx={{ 
+                          mb: 2,
+                          flex: 1,
+                          overflow: 'hidden',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 3,
+                          WebkitBoxOrient: 'vertical'
+                        }}
+                      >
+                        {doc.text}
+                      </Typography>
+                      <Box sx={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center',
+                        mt: 'auto'
+                      }}>
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            color: doc.status === 'completed' ? 'success.main' : 'text.secondary',
+                            textTransform: 'capitalize'
+                          }}
+                        >
+                          {doc.status?.replace('_', ' ') || 'Not Started'}
+                        </Typography>
+                        <Box>
+                          <Tooltip title="View">
+                            <IconButton
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDocumentView(doc);
+                              }}
+                            >
+                              <VisibilityIcon />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Annotate">
+                            <IconButton
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/annotate/${doc.id}`);
+                              }}
+                            >
+                              <EditIcon />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
+                      </Box>
+                    </Box>
+                  </Paper>
+                </Grid>
+              ))}
+            </Grid>
+          </>
         ) : (
-          <List>
-            {documents.map((doc) => (
-              <ListItem
-                key={doc.id}
-                divider
-                secondaryAction={
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Button
-                      size="small"
-                      variant="contained"
-                      onClick={() => handleDocumentView(doc)}
-                    >
-                      View
-                    </Button>
-                    <Button
-                      size="small"
-                      variant="contained"
-                      onClick={() => navigate(`/annotate/${doc.id}`)}
-                    >
-                      Annotate
-                    </Button>
-                    {doc.status === 'completed' ? (
-                      <CheckCircleIcon sx={{ color: '#4caf50', fontSize: 32 }} />
-                    ) : (
-                      <CircleIcon sx={{ color: '#9e9e9e', fontSize: 32 }} />
-                    )}
-                  </Box>
-                }
-              >
-                <ListItemText
-                  primary={
-                    <Typography variant="body2" color="text.secondary">
-                      {doc.text?.substring(0, 200)}
-                      {doc.text?.length > 200 ? '...' : ''}
-                    </Typography>
-                  }
-                  secondary={
-                    <Typography variant="caption" color="textSecondary">
-                      Created: {new Date(doc.created_at).toLocaleDateString()}
-                    </Typography>
-                  }
-                />
-              </ListItem>
-            ))}
-          </List>
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell padding="checkbox">
+                    <Checkbox
+                      indeterminate={selectedDocuments.length > 0 && selectedDocuments.length < documents.length}
+                      checked={documents.length > 0 && selectedDocuments.length === documents.length}
+                      onChange={handleSelectAll}
+                    />
+                  </TableCell>
+                  <TableCell>Document Name</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell>Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {documents.map((doc) => (
+                  <TableRow
+                    key={doc.id}
+                    hover
+                    selected={selectedDocuments.includes(doc.id)}
+                  >
+                    <TableCell padding="checkbox">
+                      <Checkbox
+                        checked={selectedDocuments.includes(doc.id)}
+                        onChange={() => handleSelectDocument(doc.id)}
+                      />
+                    </TableCell>
+                    <TableCell>{doc.text?.substring(0, 100) || 'No content'}</TableCell>
+                    <TableCell>
+                      <Typography
+                        sx={{
+                          color: doc.status === 'completed' ? 'success.main' : 'text.secondary',
+                          textTransform: 'capitalize'
+                        }}
+                      >
+                        {doc.status?.replace('_', ' ') || 'Not Started'}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Tooltip title="View">
+                        <IconButton
+                          onClick={() => handleDocumentView(doc)}
+                          size="small"
+                        >
+                          <VisibilityIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Annotate">
+                        <IconButton
+                          onClick={() => navigate(`/annotate/${doc.id}`)}
+                          size="small"
+                        >
+                          <EditIcon />
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
         )}
       </Paper>
 
@@ -695,6 +828,25 @@ const ProjectView = () => {
         document={selectedDocument} 
         entityClasses={project?.entity_classes} 
       />
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={showDeleteDialog}
+        onClose={() => setShowDeleteDialog(false)}
+      >
+        <DialogTitle>Delete Documents</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete {selectedDocuments.length} selected document{selectedDocuments.length === 1 ? '' : 's'}? This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowDeleteDialog(false)}>Cancel</Button>
+          <Button onClick={handleDeleteConfirm} color="error" variant="contained">
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 };

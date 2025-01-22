@@ -140,6 +140,17 @@ export const updateDocument = async (documentId, documentData) => {
   }
 };
 
+export const bulkDeleteDocuments = async (documentIds) => {
+  try {
+    const response = await axios.delete(`${API_URL}/documents/bulk-delete`, {
+      data: { document_ids: documentIds }
+    });
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
 export const exportProjectData = async (projectId) => {
   try {
     const response = await axios.get(`${API_URL}/projects/${projectId}/export`, {

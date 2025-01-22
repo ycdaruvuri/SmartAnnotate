@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Request
 from models.document import DocumentCreate, Document, DocumentUpdate
 from utils.auth import get_current_user
 from config.database import documents_collection, projects_collection
@@ -261,6 +261,29 @@ async def update_document(
     except Exception as e:
         print(f"Error in update_document: {str(e)}")
         raise
+
+@router.delete("/bulk-delete")
+async def bulk_delete_documents(request: Request):
+    try:
+        data = await request.json()
+        document_ids = data.get('document_ids', [])
+        
+        if not document_ids:
+            raise HTTPException(status_code=400, detail="No document IDs provided")
+
+        # Convert string IDs to ObjectId
+        object_ids = [ObjectId(doc_id) for doc_id in document_ids]
+        
+        # Delete documents
+        result = documents_collection.delete_many({"_id": {"$in": object_ids}})
+        
+        if result.deleted_count == 0:
+            raise HTTPException(status_code=404, detail="No documents found to delete")
+            
+        return {"message": f"Successfully deleted {result.deleted_count} documents"}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/project/{project_id}/export")
 async def export_project_data(project_id: str, current_user = Depends(get_current_user)):
