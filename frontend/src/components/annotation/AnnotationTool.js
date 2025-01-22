@@ -58,7 +58,10 @@ const AnnotationTool = () => {
   const [focusedEntityIndex, setFocusedEntityIndex] = useState(null);
   const [autoSave, setAutoSave] = useState(false);
   const [unsavedDocuments, setUnsavedDocuments] = useState(new Set());
-  const [documentChanges, setDocumentChanges] = useState(new Map());
+  const [documentAnnotations, setDocumentAnnotations] = useState(new Map());
+  const [documentStates, setDocumentStates] = useState(new Map());
+  const [documentDataMap, setDocumentDataMap] = useState(new Map());
+  const [documentTexts, setDocumentTexts] = useState(new Map());
   const [showExitDialog, setShowExitDialog] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState(null);
   const [isComplete, setIsComplete] = useState(false);
@@ -68,11 +71,9 @@ const AnnotationTool = () => {
     try {
       setLoading(true);
       
-      // First get the document to get its project_id
       const doc = await getDocument(documentId);
       console.log('Raw document data:', doc);
       
-      // Then fetch project data and documents in parallel
       const [projectData, projectDocs] = await Promise.all([
         getProject(doc.project_id),
         getProjectDocuments(doc.project_id)
@@ -84,66 +85,82 @@ const AnnotationTool = () => {
         return;
       }
 
-      // Update entity colors based on project entity classes
-      const updatedEntities = (doc.annotations || []).map(annotation => ({
-        start: annotation.start_index,
-        end: annotation.end_index,
-        label: annotation.entity,
-        text: annotation.text,
-        color: projectData.entity_classes.find(ec => ec.name === annotation.entity)?.color || '#ffeb3b'
-      }));
+      setDocumentDataMap(prev => {
+        const newMap = new Map(prev);
+        newMap.set(doc.id, {
+          text: doc.text,
+          project_id: doc.project_id,
+          status: doc.status
+        });
+        return newMap;
+      });
 
-      console.log('Loaded entities:', updatedEntities);
+      setDocumentTexts(prev => {
+        const newMap = new Map(prev);
+        newMap.set(doc.id, doc.text);
+        return newMap;
+      });
+
+      let updatedEntities;
+      if (documentAnnotations.has(doc.id)) {
+        updatedEntities = documentAnnotations.get(doc.id);
+        console.log('Using stored annotations:', updatedEntities);
+      } else {
+        updatedEntities = (doc.annotations || []).map(annotation => ({
+          start: annotation.start_index,
+          end: annotation.end_index,
+          label: annotation.entity,
+          text: annotation.text,
+          color: projectData.entity_classes.find(ec => ec.name === annotation.entity)?.color || '#ffeb3b'
+        }));
+        setDocumentAnnotations(prev => {
+          const newMap = new Map(prev);
+          newMap.set(doc.id, updatedEntities);
+          return newMap;
+        });
+      }
 
       setProjectData(projectData);
       setDocData(doc);
       setEntities(updatedEntities);
       setProjectDocuments(projectDocs);
+      setIsComplete(doc.status === 'completed');
       
     } catch (error) {
       console.error('Error fetching document:', error);
-      toast.error('Error loading document');
-      navigate('/projects');
+      toast.error('Failed to load document');
     } finally {
       setLoading(false);
     }
   }, [documentId, navigate]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  useEffect(() => {
-    if (docData) {
-      // Store the initial entities when document loads
-      setDocumentChanges(prev => {
-        const newMap = new Map(prev);
-        if (!newMap.has(documentId)) {
-          newMap.set(documentId, {
-            originalEntities: [...entities],
-            currentEntities: [...entities]
-          });
-        }
-        return newMap;
-      });
+    if (documentId) {
+      fetchData();
     }
-  }, [docData, documentId, entities]);
+  }, [fetchData, documentId]);
 
   useEffect(() => {
-    if (documentChanges.has(documentId)) {
-      setDocumentChanges(prev => {
+    if (documentId) {
+      setDocumentAnnotations(prev => {
         const newMap = new Map(prev);
-        const docChange = newMap.get(documentId);
-        newMap.set(documentId, {
-          ...docChange,
-          currentEntities: [...entities]
-        });
+        newMap.set(documentId, entities);
         return newMap;
       });
 
-      // Check if entities have changed from original
-      const docChange = documentChanges.get(documentId);
-      const hasChanged = JSON.stringify(docChange.originalEntities) !== JSON.stringify(entities);
+      const originalEntities = docData?.annotations?.map(annotation => ({
+        start: annotation.start_index,
+        end: annotation.end_index,
+        label: annotation.entity,
+        text: annotation.text
+      })) || [];
+
+      const hasChanged = JSON.stringify(originalEntities) !== JSON.stringify(entities.map(e => ({
+        start: e.start,
+        end: e.end,
+        label: e.label,
+        text: e.text
+      })));
       
       setUnsavedDocuments(prev => {
         const newSet = new Set(prev);
@@ -155,7 +172,7 @@ const AnnotationTool = () => {
         return newSet;
       });
     }
-  }, [entities, documentId]);
+  }, [documentId, entities, docData]);
 
   const handleKeyPress = useCallback((e) => {
     if (e.key >= '1' && e.key <= '9') {
@@ -209,39 +226,38 @@ const AnnotationTool = () => {
 
     const selection = window.getSelection();
     const selectedText = selection.toString().trim();
+    
     if (!selectedText) return;
-
+    
     const range = selection.getRangeAt(0);
-    const textContent = textContentRef.current;
-
-    if (!textContent.contains(range.startContainer) || !textContent.contains(range.endContainer)) {
-      return;
-    }
-
     const preSelectionRange = range.cloneRange();
-    preSelectionRange.selectNodeContents(textContent);
+    preSelectionRange.selectNodeContents(textContentRef.current);
     preSelectionRange.setEnd(range.startContainer, range.startOffset);
+    
     const start = preSelectionRange.toString().length;
     const end = start + selectedText.length;
 
-    // Check for overlapping or duplicate selections
+    const currentDocData = documentDataMap.get(documentId);
+    if (!currentDocData || currentDocData.text.slice(start, end) !== selectedText) {
+      console.error('Selected text does not match document text');
+      toast.error('Invalid text selection');
+      return;
+    }
+
     const hasOverlap = entities.some(entity => {
-      // Check if the new selection overlaps with any existing entity
       const overlaps = (
-        (start >= entity.start && start < entity.end) || // Start point overlaps
-        (end > entity.start && end <= entity.end) || // End point overlaps
-        (start <= entity.start && end >= entity.end) // Completely contains existing entity
+        (start >= entity.start && start < entity.end) || 
+        (end > entity.start && end <= entity.end) || 
+        (start <= entity.start && end >= entity.end)
       );
       
-      // Check if it's an exact duplicate
       const isDuplicate = start === entity.start && end === entity.end;
       
       return overlaps || isDuplicate;
     });
 
     if (hasOverlap) {
-      toast.warning('Cannot create overlapping or duplicate annotations');
-      selection.removeAllRanges();
+      toast.error('Overlapping or duplicate annotation detected');
       return;
     }
 
@@ -255,13 +271,10 @@ const AnnotationTool = () => {
 
     console.log('New entity:', newEntity);
     setEntities(prev => {
-      // Sort entities by start position to maintain order
       const updated = [...prev, newEntity].sort((a, b) => a.start - b.start);
       return updated;
     });
-    
-    selection.removeAllRanges();
-  }, [selectedEntity, entities]);
+  }, [selectedEntity, entities, documentId, documentDataMap]);
 
   const handleEntitiesChange = useCallback((newEntities) => {
     setEntities(newEntities);
@@ -278,19 +291,59 @@ const AnnotationTool = () => {
     setEntities(prev => [...prev, newEntity]);
   }, []);
 
+  const navigateDocument = useCallback((direction) => {
+    const currentIndex = projectDocuments.findIndex(doc => doc.id === documentId);
+    const nextIndex = currentIndex + direction;
+    
+    if (nextIndex >= 0 && nextIndex < projectDocuments.length) {
+      setDocumentAnnotations(prev => {
+        const newMap = new Map(prev);
+        newMap.set(documentId, entities);
+        return newMap;
+      });
+
+      const nextDoc = projectDocuments[nextIndex];
+      navigate(`/annotate/${nextDoc.id}`);
+    }
+  }, [documentId, entities, projectDocuments, navigate]);
+
   const handleSaveAll = async () => {
+    if (unsavedDocuments.size === 0) return;
+
     try {
       setLoading(true);
       const promises = Array.from(unsavedDocuments).map(async (docId) => {
-        const changes = documentChanges.get(docId);
-        if (!changes) return;
+        const annotationEntities = documentAnnotations.get(docId);
+        const docData = documentDataMap.get(docId);
+        
+        if (!annotationEntities || !docData) {
+          console.error('Missing data for document:', docId);
+          return;
+        }
 
-        const annotations = changes.currentEntities.map(entity => ({
+        const validAnnotations = annotationEntities
+          .filter(entity => {
+            const isValid = 
+              entity.start >= 0 && 
+              entity.end <= docData.text.length &&
+              entity.start < entity.end &&
+              docData.text.slice(entity.start, entity.end) === entity.text;
+            
+            if (!isValid) {
+              console.warn('Invalid annotation:', entity, 'for document:', docId);
+            }
+            return isValid;
+          })
+          .sort((a, b) => a.start - b.end);
+
+        const annotations = validAnnotations.map(entity => ({
           start_index: entity.start,
           end_index: entity.end,
           entity: entity.label,
           text: entity.text
         }));
+
+        console.log('Saving document:', docId, 'with annotations:', annotations);
 
         await updateDocument(docId, {
           annotations,
@@ -316,28 +369,43 @@ const AnnotationTool = () => {
 
     try {
       setLoading(true);
-      const annotations = entities.map(entity => ({
+      const annotationEntities = documentAnnotations.get(documentId);
+      const docData = documentDataMap.get(documentId);
+      
+      if (!annotationEntities || !docData) {
+        console.error('Missing data for current document');
+        return;
+      }
+
+      const validAnnotations = annotationEntities
+        .filter(entity => {
+          const isValid = 
+            entity.start >= 0 && 
+            entity.end <= docData.text.length &&
+            entity.start < entity.end &&
+            docData.text.slice(entity.start, entity.end) === entity.text;
+          
+          if (!isValid) {
+            console.warn('Invalid annotation:', entity);
+          }
+          return isValid;
+        })
+        .sort((a, b) => a.start - b.end);
+
+      const annotations = validAnnotations.map(entity => ({
         start_index: entity.start,
         end_index: entity.end,
         entity: entity.label,
         text: entity.text
       }));
 
+      console.log('Saving current document with annotations:', annotations);
+
       await updateDocument(documentId, {
         annotations,
         text: docData.text,
         project_id: docData.project_id,
         status: docData.status
-      });
-
-      // Update document changes after successful save
-      setDocumentChanges(prev => {
-        const newMap = new Map(prev);
-        newMap.set(documentId, {
-          originalEntities: [...entities],
-          currentEntities: [...entities]
-        });
-        return newMap;
       });
 
       setUnsavedDocuments(prev => {
@@ -366,28 +434,11 @@ const AnnotationTool = () => {
     } catch (error) {
       console.error('Error updating document status:', error);
       toast.error('Failed to update document status');
-      setIsComplete(!isComplete); // revert the state if update fails
+      setIsComplete(!isComplete); 
     }
   };
 
   const hasUnsavedChanges = unsavedDocuments.has(documentId);
-
-  const navigateDocument = useCallback((direction) => {
-    const currentIndex = projectDocuments.findIndex(doc => doc.id === documentId);
-    const nextIndex = currentIndex + direction;
-    
-    if (nextIndex >= 0 && nextIndex < projectDocuments.length) {
-      const nextDoc = projectDocuments[nextIndex];
-      
-      if (autoSave && hasUnsavedChanges) {
-        handleSave().then(() => {
-          navigate(`/annotate/${nextDoc.id}`);
-        });
-      } else {
-        navigate(`/annotate/${nextDoc.id}`);
-      }
-    }
-  }, [projectDocuments, documentId, navigate, hasUnsavedChanges, autoSave, handleSave]);
 
   const handleBack = () => {
     if (hasUnsavedChanges) {
@@ -712,7 +763,6 @@ const AnnotationTool = () => {
         </Box>
       </Popover>
 
-      {/* Exit Confirmation Dialog */}
       <Dialog
         open={showExitDialog}
         onClose={() => {
