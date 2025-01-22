@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Container,
@@ -17,34 +17,40 @@ import {
   DialogActions,
   TextField,
   CircularProgress,
-  IconButton,
   ToggleButtonGroup,
   ToggleButton,
   List,
   ListItem,
   ListItemText,
-  Select,
-  MenuItem,
+  IconButton,
 } from '@mui/material';
-import UploadFileIcon from '@mui/icons-material/UploadFile';
-import AddIcon from '@mui/icons-material/Add';
-import DownloadIcon from '@mui/icons-material/Download';
-import EditIcon from '@mui/icons-material/Edit';
-import GridViewIcon from '@mui/icons-material/GridView';
-import ViewListIcon from '@mui/icons-material/ViewList';
-import ViewModuleIcon from '@mui/icons-material/ViewModule';
-import DeleteIcon from '@mui/icons-material/Delete';
-import PaletteIcon from '@mui/icons-material/Palette';
 import {
-  getProject,
-  getProjectDocuments,
-  createDocument,
-  uploadDocument,
-  exportProjectData,
-  updateProject,
-} from '../../utils/api';
+  ViewModule as GridViewIcon,
+  ViewList as ListViewIcon,
+  Edit as EditIcon,
+  FileUpload as FileUploadIcon,
+  Download as DownloadIcon,
+  Add as AddIcon,
+  Delete as DeleteIcon,
+} from '@mui/icons-material';
+import { ChromePicker } from 'react-color';
 import { toast } from 'react-toastify';
-import { COLOR_PALETTE, getRandomUnusedColor } from '../../utils/colors';
+import { 
+  getProject, 
+  getProjectDocuments, 
+  updateProject, 
+  uploadDocument, 
+  exportProjectData,
+  createDocument,
+  updateDocument
+} from '../../utils/api';
+
+const COLOR_PALETTE = [
+  '#ffeb3b', '#ffc107', '#ff9800', '#ff5722', '#f44336',
+  '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3',
+  '#03a9f4', '#00bcd4', '#009688', '#4caf50', '#8bc34a',
+  '#cddc39', '#795548', '#9e9e9e', '#607d8b',
+];
 
 const ProjectView = () => {
   const { projectId } = useParams();
@@ -63,40 +69,88 @@ const ProjectView = () => {
     entity_classes: [],
   });
   const [newEntity, setNewEntity] = useState({ name: '', color: COLOR_PALETTE[0] });
+  const [showColorPicker, setShowColorPicker] = useState(false);
   const [editingEntity, setEditingEntity] = useState(null);
-  const [editingEntityName, setEditingEntityName] = useState('');
+  const [editingEntityColor, setEditingEntityColor] = useState(null);
+  const [editingEntityName, setEditingEntityName] = useState({ entity: null, name: '' });
 
-  const fetchProjectData = useCallback(async () => {
+  useEffect(() => {
+    let isSubscribed = true;
+
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const [projectData, documentsData] = await Promise.all([
+          getProject(projectId),
+          getProjectDocuments(projectId, { skip: 0, limit: -1 }) // Fetch all documents
+        ]);
+
+        if (isSubscribed) {
+          setProject(projectData);
+          setEditedProject(projectData);
+          setDocuments(documentsData);
+          console.log('Loaded documents:', documentsData.length);
+        }
+      } catch (error) {
+        console.error('Error fetching data:', error);
+        if (isSubscribed) {
+          toast.error('Failed to load project data');
+        }
+      } finally {
+        if (isSubscribed) {
+          setLoading(false);
+        }
+      }
+    };
+
+    if (projectId) {
+      fetchData();
+    }
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [projectId]);
+
+  const refreshData = async () => {
     try {
-      const projectData = await getProject(projectId);
-      setProject(projectData);
-      setEditedProject({
-        name: projectData.name || '',
-        description: projectData.description || '',
-        entity_classes: projectData.entity_classes || [],
-      });
+      setLoading(true);
+      const [projectData, documentsData] = await Promise.all([
+        getProject(projectId),
+        getProjectDocuments(projectId, { skip: 0, limit: -1 }) // Fetch all documents
+      ]);
 
-      const documentsData = await getProjectDocuments(projectId);
-      setDocuments(documentsData || []);
+      setProject(projectData);
+      setEditedProject(projectData);
+      setDocuments(documentsData);
+      console.log('Refreshed documents:', documentsData.length);
     } catch (error) {
-      console.error('Error fetching project data:', error);
-      toast.error('Error fetching project data');
+      console.error('Error refreshing data:', error);
+      toast.error('Failed to refresh project data');
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
-
-  useEffect(() => {
-    fetchProjectData();
-  }, [projectId, fetchProjectData]);
+  };
 
   const handleEditProject = () => {
     setEditDialogOpen(true);
   };
 
+  const handleSaveProject = async () => {
+    try {
+      await updateProject(projectId, editedProject);
+      await refreshData();
+      setEditDialogOpen(false);
+      toast.success('Project updated successfully');
+    } catch (error) {
+      console.error('Error updating project:', error);
+      toast.error('Failed to update project');
+    }
+  };
+
   const handleAddEntity = () => {
-    if (!newEntity.name.trim()) {
-      toast.error('Entity name cannot be empty');
+    if (!newEntity.name) {
+      toast.error('Please enter an entity name');
       return;
     }
 
@@ -105,114 +159,73 @@ const ProjectView = () => {
       return;
     }
 
-    const usedColors = editedProject.entity_classes.map(e => e.color);
-    const randomColor = getRandomUnusedColor(usedColors);
-
-    // Validate that the color is in the palette
-    if (!COLOR_PALETTE.includes(randomColor)) {
-      console.error('Invalid color generated:', randomColor);
-      randomColor = COLOR_PALETTE[0];
-    }
-
-    setEditedProject({
-      ...editedProject,
-      entity_classes: [...editedProject.entity_classes, { 
-        name: newEntity.name.trim(),
-        color: randomColor
-      }],
-    });
+    setEditedProject(prev => ({
+      ...prev,
+      entity_classes: [...prev.entity_classes, { ...newEntity }]
+    }));
     setNewEntity({ name: '', color: COLOR_PALETTE[0] });
   };
 
-  const handleEditEntityStart = (entity) => {
-    setEditingEntity(entity);
-    setEditingEntityName(entity.name);
-  };
-
-  const handleEditEntitySave = () => {
-    if (!editingEntityName.trim()) {
-      toast.error('Entity name cannot be empty');
-      return;
-    }
-
-    if (editingEntityName !== editingEntity.name && 
-        editedProject.entity_classes.some(e => e.name === editingEntityName)) {
-      toast.error('Entity with this name already exists');
-      return;
-    }
-
-    const updatedEntities = editedProject.entity_classes.map(e => 
-      e === editingEntity ? { ...e, name: editingEntityName.trim() } : e
-    );
-
-    setEditedProject({
-      ...editedProject,
-      entity_classes: updatedEntities,
-      isComplete: false // Reset complete flag when entity is edited
-    });
-
-    setEditingEntity(null);
-    setEditingEntityName('');
-  };
-
-  const handleChangeEntityColor = (entity, newColor) => {
-    // Validate that the color is in the palette
-    if (!COLOR_PALETTE.includes(newColor)) {
-      toast.error('Invalid color selected');
-      return;
-    }
-
-    const updatedEntities = editedProject.entity_classes.map(e => 
-      e === entity ? { ...e, color: newColor } : e
-    );
-
-    setEditedProject({
-      ...editedProject,
-      entity_classes: updatedEntities
-    });
-  };
-
-  const handleRandomColor = (entity) => {
-    const usedColors = editedProject.entity_classes.map(e => e.color);
-    let randomColor = getRandomUnusedColor(usedColors);
-
-    // Validate that the color is in the palette
-    if (!COLOR_PALETTE.includes(randomColor)) {
-      console.error('Invalid color generated:', randomColor);
-      randomColor = COLOR_PALETTE[0];
-    }
-
-    const updatedEntities = editedProject.entity_classes.map(e => 
-      e === entity ? { ...e, color: randomColor } : e
-    );
-
-    setEditedProject({
-      ...editedProject,
-      entity_classes: updatedEntities
-    });
-  };
-
   const handleRemoveEntity = (entityName) => {
-    setEditedProject({
-      ...editedProject,
-      entity_classes: editedProject.entity_classes.filter(e => e.name !== entityName),
-      isComplete: false // Reset complete flag when entity is removed
-    });
+    setEditedProject(prev => ({
+      ...prev,
+      entity_classes: prev.entity_classes.filter(e => e.name !== entityName)
+    }));
   };
 
-  const handleSaveProject = async () => {
-    if (!editedProject.name.trim()) {
-      toast.error('Project name is required');
+  const handleCreateDocument = async () => {
+    if (!newText.trim()) {
+      toast.error('Please enter some text');
       return;
     }
 
     try {
-      await updateProject(projectId, editedProject);
-      setProject({ ...project, ...editedProject });
-      toast.success('Project updated successfully');
-      setEditDialogOpen(false);
+      await createDocument({
+        text: newText.trim(),
+        project_id: projectId
+      });
+      setNewText('');
+      setOpenDialog(false);
+      await refreshData();
+      toast.success('Document created successfully');
     } catch (error) {
-      toast.error('Error updating project');
+      console.error('Error creating document:', error);
+      toast.error('Failed to create document');
+    }
+  };
+
+  const handleFileUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    setUploading(true);
+    try {
+      await uploadDocument(projectId, file);
+      await refreshData();
+      toast.success('Document uploaded successfully');
+    } catch (error) {
+      console.error('Error uploading document:', error);
+      toast.error('Failed to upload document');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleExport = async () => {
+    try {
+      const data = await exportProjectData(projectId);
+      const blob = new Blob([data], { type: 'application/json' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `project_${projectId}_export.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error exporting project:', error);
+      toast.error('Failed to export project data');
     }
   };
 
@@ -222,55 +235,132 @@ const ProjectView = () => {
     }
   };
 
-  const handleCreateDocument = async () => {
-    if (!newText.trim()) {
-      toast.error('Please enter document text');
+  const handleEditEntityColor = (entity) => {
+    setEditingEntity(entity);
+    setEditingEntityColor(entity.color);
+    setShowColorPicker(true);
+  };
+
+  const handleSaveEntityColor = () => {
+    if (editingEntity && editingEntityColor) {
+      setEditedProject(prev => ({
+        ...prev,
+        entity_classes: prev.entity_classes.map(e => 
+          e.name === editingEntity.name 
+            ? { ...e, color: editingEntityColor }
+            : e
+        )
+      }));
+    }
+    setEditingEntity(null);
+    setEditingEntityColor(null);
+    setShowColorPicker(false);
+  };
+
+  const handleEditEntityName = async (entity, newName) => {
+    if (!newName.trim() || newName === entity.name) return;
+
+    // Check if the new name already exists
+    if (editedProject.entity_classes.some(e => e.name === newName && e.name !== entity.name)) {
+      toast.error('An entity with this name already exists');
       return;
     }
 
     try {
-      const response = await createDocument({
-        project_id: projectId,
-        text: newText,
+      setLoading(true);
+      
+      // First update the project's entity classes
+      const updatedProject = {
+        ...editedProject,
+        entity_classes: editedProject.entity_classes.map(e =>
+          e.name === entity.name ? { ...e, name: newName } : e
+        )
+      };
+
+      // Update the project first
+      await updateProject(projectId, updatedProject);
+
+      // Get ALL documents in the project by setting limit to -1
+      const projectDocs = await getProjectDocuments(projectId, { skip: 0, limit: -1 });
+      console.log('Total documents to process:', projectDocs.length);
+
+      // Update entity name in all documents that have annotations
+      let updatedCount = 0;
+      const updatePromises = projectDocs.map(async (doc) => {
+        if (!doc.annotations || doc.annotations.length === 0) return;
+
+        // Check if this document has any annotations with the old entity name
+        const hasOldEntity = doc.annotations.some(ann => ann.entity === entity.name);
+        if (!hasOldEntity) return;
+
+        const updatedAnnotations = doc.annotations.map(annotation => {
+          if (annotation.entity === entity.name) {
+            return {
+              ...annotation,
+              entity: newName,
+              text: annotation.text
+            };
+          }
+          return annotation;
+        });
+
+        console.log(`Updating document ${doc.id}:`);
+        console.log('- Old annotations:', doc.annotations);
+        console.log('- New annotations:', updatedAnnotations);
+        
+        try {
+          await updateDocument(doc.id, {
+            annotations: updatedAnnotations,
+            entities: updatedAnnotations.map(ann => ({
+              start: ann.start_index,
+              end: ann.end_index,
+              label: ann.entity,
+              text: ann.text
+            }))
+          });
+          updatedCount++;
+          console.log(`✓ Successfully updated document ${doc.id}`);
+        } catch (error) {
+          console.error(`× Failed to update document ${doc.id}:`, error);
+        }
       });
-      setDocuments([...documents, response]);
-      setNewText('');
-      setOpenDialog(false);
-      toast.success('Document created successfully');
-    } catch (error) {
-      toast.error('Error creating document');
-    }
-  };
 
-  const handleFileUpload = async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+      // Wait for all document updates to complete
+      await Promise.all(updatePromises);
+      console.log(`Updated ${updatedCount} documents with the new entity name`);
 
-    try {
-      setUploading(true);
-      const response = await uploadDocument(projectId, file);
-      setDocuments([...documents, response]);
-      toast.success('Document uploaded successfully');
+      // Update local state
+      setEditedProject(updatedProject);
+      setProject(updatedProject);
+      
+      // Refresh documents to show updated annotations
+      const updatedDocs = await getProjectDocuments(projectId, { skip: 0, limit: -1 });
+      setDocuments(updatedDocs);
+      
+      toast.success(`Successfully updated entity name in ${updatedCount} documents`);
     } catch (error) {
-      toast.error('Error uploading document');
+      console.error('Error updating entity name:', error);
+      toast.error('Failed to update entity name');
     } finally {
-      setUploading(false);
+      setLoading(false);
     }
   };
 
-  const handleExport = async () => {
-    try {
-      const blob = await exportProjectData(projectId);
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${project?.name || 'project'}_export.json`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (error) {
-      toast.error('Failed to export project data');
+  const handleEntityNameInputChange = (entity, newValue) => {
+    setEditingEntityName({ entity, name: newValue });
+  };
+
+  const handleEntityNameInputBlur = async (entity) => {
+    if (editingEntityName.entity === entity && editingEntityName.name) {
+      await handleEditEntityName(entity, editingEntityName.name);
+    }
+    setEditingEntityName({ entity: null, name: '' });
+  };
+
+  const handleEntityNameKeyPress = async (event, entity) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      event.target.blur();
     }
   };
 
@@ -282,135 +372,106 @@ const ProjectView = () => {
     );
   }
 
-  if (!project) {
-    return (
-      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-        <Paper sx={{ p: 3, textAlign: 'center' }}>
-          <Typography variant="h5" color="error">
-            Project not found
-          </Typography>
-          <Button
-            variant="contained"
-            onClick={() => navigate('/projects')}
-            sx={{ mt: 2 }}
-          >
-            Back to Projects
-          </Button>
-        </Paper>
-      </Container>
-    );
-  }
-
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+      {/* Project Header */}
       <Paper sx={{ p: 3, mb: 3 }}>
         <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+          <Typography variant="h4">{project?.name}</Typography>
           <Box>
-            <Box display="flex" alignItems="center" mb={1}>
-              <Typography variant="h4">
-                {project.name}
-              </Typography>
-              <IconButton
-                onClick={handleEditProject}
-                size="small"
-                sx={{ ml: 1 }}
-                aria-label="edit project settings"
-              >
-                <EditIcon />
-              </IconButton>
-            </Box>
-            <Typography color="textSecondary" paragraph>
-              {project.description}
-            </Typography>
-            <Box display="flex" gap={1}>
-              {project.entity_classes?.map((ec) => (
-                <Chip
-                  key={ec.name}
-                  label={ec.name}
-                  size="small"
-                  style={{ backgroundColor: ec.color }}
-                />
-              ))}
-            </Box>
+            <Button
+              startIcon={<EditIcon />}
+              onClick={handleEditProject}
+              sx={{ mr: 1 }}
+            >
+              Edit Project
+            </Button>
+            <Button
+              startIcon={<DownloadIcon />}
+              onClick={handleExport}
+            >
+              Export
+            </Button>
           </Box>
+        </Box>
+        <Typography color="textSecondary" paragraph>
+          {project?.description}
+        </Typography>
+        <Box display="flex" gap={1} flexWrap="wrap">
+          {project?.entity_classes.map((entity) => (
+            <Chip
+              key={entity.name}
+              label={entity.name}
+              style={{ backgroundColor: entity.color }}
+            />
+          ))}
+        </Box>
+      </Paper>
+
+      {/* Documents Section */}
+      <Paper sx={{ p: 3 }}>
+        <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+          <Typography variant="h5">Documents</Typography>
           <Box>
             <ToggleButtonGroup
               value={viewMode}
               exclusive
               onChange={handleViewModeChange}
-              size="small"
-              sx={{ mb: 2 }}
+              sx={{ mr: 2 }}
             >
-              <ToggleButton value="grid" aria-label="grid view">
+              <ToggleButton value="grid">
                 <GridViewIcon />
               </ToggleButton>
-              <ToggleButton value="module" aria-label="module view">
-                <ViewModuleIcon />
-              </ToggleButton>
-              <ToggleButton value="list" aria-label="list view">
-                <ViewListIcon />
+              <ToggleButton value="list">
+                <ListViewIcon />
               </ToggleButton>
             </ToggleButtonGroup>
+            <Button
+              variant="contained"
+              startIcon={<FileUploadIcon />}
+              component="label"
+              disabled={uploading}
+            >
+              Upload File
+              <input
+                type="file"
+                hidden
+                onChange={handleFileUpload}
+                accept=".txt,.doc,.docx,.pdf"
+              />
+            </Button>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => setOpenDialog(true)}
+              sx={{ mr: 1 }}
+            >
+              Add Document
+            </Button>
           </Box>
         </Box>
 
-        <Box display="flex" gap={2} mb={3}>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => setOpenDialog(true)}
-          >
-            New Document
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<UploadFileIcon />}
-            component="label"
-            disabled={uploading}
-          >
-            Upload Document
-            <input
-              type="file"
-              hidden
-              onChange={handleFileUpload}
-              accept=".txt,.doc,.docx"
-            />
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<DownloadIcon />}
-            onClick={handleExport}
-          >
-            Export Data
-          </Button>
-        </Box>
-
-        {viewMode === 'grid' && (
+        {viewMode === 'grid' ? (
           <Grid container spacing={3}>
             {documents.map((doc) => (
               <Grid item xs={12} sm={6} md={4} key={doc.id}>
-                <Card>
-                  <CardContent>
-                    <Box display="flex" alignItems="center" gap={1}>
-                      <Typography variant="h6" noWrap sx={{ flexGrow: 1 }}>
-                        {doc.name || 'Untitled Document'}
-                      </Typography>
-                      {doc.status === 'completed' && (
-                        <Chip 
-                          label="Completed" 
-                          size="small" 
-                          color="success" 
-                          sx={{ minWidth: 90 }}
-                        />
-                      )}
-                    </Box>
-                    <Typography color="textSecondary" noWrap>
-                      {doc.text?.substring(0, 100)}...
+                <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                  <CardContent sx={{ flexGrow: 1 }}>
+                    <Typography variant="h6" component="h2" gutterBottom noWrap>
+                      Document {doc.id}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {doc.text?.substring(0, 150)}
+                      {doc.text?.length > 150 ? '...' : ''}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                      Created: {new Date(doc.created_at).toLocaleDateString()}
                     </Typography>
                   </CardContent>
                   <CardActions>
                     <Button
                       size="small"
+                      variant="contained"
                       onClick={() => navigate(`/annotate/${doc.id}`)}
                     >
                       Annotate
@@ -420,75 +481,54 @@ const ProjectView = () => {
               </Grid>
             ))}
           </Grid>
-        )}
-
-        {viewMode === 'list' && (
+        ) : (
           <List>
             {documents.map((doc) => (
               <ListItem
                 key={doc.id}
-                button
-                onClick={() => navigate(`/annotate/${doc.id}`)}
                 divider
+                secondaryAction={
+                  <Button
+                    size="small"
+                    variant="contained"
+                    onClick={() => navigate(`/annotate/${doc.id}`)}
+                  >
+                    Annotate
+                  </Button>
+                }
               >
                 <ListItemText
                   primary={
-                    <Box display="flex" alignItems="center" gap={1}>
-                      <Typography variant="body1">
-                        {doc.name || 'Untitled Document'}
-                      </Typography>
-                      {doc.status === 'completed' && (
-                        <Chip 
-                          label="Completed" 
-                          size="small" 
-                          color="success" 
-                          sx={{ minWidth: 90 }}
-                        />
-                      )}
-                    </Box>
+                    <Typography variant="h6" component="h2">
+                      Document {doc.id}
+                    </Typography>
                   }
-                  secondary={doc.text?.substring(0, 100) + '...'}
+                  secondary={
+                    <>
+                      <Typography variant="body2" color="text.secondary" paragraph>
+                        {doc.text?.substring(0, 150)}
+                        {doc.text?.length > 150 ? '...' : ''}
+                      </Typography>
+                      <Typography variant="caption" color="textSecondary">
+                        Created: {new Date(doc.created_at).toLocaleDateString()}
+                      </Typography>
+                    </>
+                  }
                 />
-                <Button size="small" color="primary">
-                  Annotate
-                </Button>
               </ListItem>
             ))}
           </List>
         )}
-
-        {viewMode === 'module' && (
-          <Grid container spacing={2}>
-            {documents.map((doc) => (
-              <Grid item xs={12} key={doc._id}>
-                <Paper sx={{ p: 2 }}>
-                  <Typography variant="h6">{doc.name || 'Untitled Document'}</Typography>
-                  <Typography paragraph>{doc.text?.substring(0, 200)}...</Typography>
-                  <Button
-                    variant="contained"
-                    size="small"
-                    onClick={() => navigate(`/annotate/${doc._id}`)}
-                  >
-                    Annotate
-                  </Button>
-                </Paper>
-              </Grid>
-            ))}
-          </Grid>
-        )}
-
-        {documents.length === 0 && (
-          <Box textAlign="center" py={4}>
-            <Typography color="textSecondary">
-              No documents found. Create a new document or upload one to get started.
-            </Typography>
-          </Box>
-        )}
       </Paper>
 
-      {/* New Document Dialog */}
-      <Dialog open={openDialog} onClose={() => setOpenDialog(false)}>
-        <DialogTitle>Create New Document</DialogTitle>
+      {/* Add Document Dialog */}
+      <Dialog
+        open={openDialog}
+        onClose={() => setOpenDialog(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Add New Document</DialogTitle>
         <DialogContent>
           <TextField
             autoFocus
@@ -510,227 +550,130 @@ const ProjectView = () => {
       </Dialog>
 
       {/* Edit Project Dialog */}
-      <Dialog 
-        open={editDialogOpen} 
-        onClose={() => setEditDialogOpen(false)} 
-        maxWidth="sm" 
+      <Dialog
+        open={editDialogOpen}
+        onClose={() => setEditDialogOpen(false)}
+        maxWidth="sm"
         fullWidth
-        disablePortal={false}
-        keepMounted={false}
-        aria-labelledby="edit-project-dialog-title"
       >
-        <DialogTitle id="edit-project-dialog-title">Edit Project Settings</DialogTitle>
+        <DialogTitle>Edit Project</DialogTitle>
         <DialogContent>
           <TextField
-            autoFocus
             margin="dense"
-            id="project-name"
-            name="project-name"
             label="Project Name"
             fullWidth
             value={editedProject.name}
-            onChange={(e) => setEditedProject({ ...editedProject, name: e.target.value })}
-            inputProps={{ 'aria-label': 'Project name' }}
+            onChange={(e) => setEditedProject(prev => ({ ...prev, name: e.target.value }))}
           />
           <TextField
             margin="dense"
-            id="project-description"
-            name="project-description"
             label="Description"
             fullWidth
             multiline
             rows={3}
             value={editedProject.description}
-            onChange={(e) => setEditedProject({ ...editedProject, description: e.target.value })}
-            inputProps={{ 'aria-label': 'Project description' }}
+            onChange={(e) => setEditedProject(prev => ({ ...prev, description: e.target.value }))}
           />
-
-          <Typography variant="h6" sx={{ mt: 3, mb: 2 }}>
+          <Typography variant="subtitle1" sx={{ mt: 2, mb: 1 }}>
             Entity Classes
           </Typography>
-
-          <List aria-label="Entity classes list">
-            {editedProject.entity_classes.map((entity, index) => (
-              <ListItem
-                key={entity.name}
-                sx={{
-                  bgcolor: 'background.paper',
-                  borderRadius: 1,
-                  mb: 1,
-                  border: '1px solid',
-                  borderColor: 'divider',
-                }}
-              >
-                {editingEntity === entity ? (
-                  <>
-                    <TextField
-                      size="small"
-                      id={`edit-entity-${index}`}
-                      name={`edit-entity-${index}`}
-                      value={editingEntityName}
-                      onChange={(e) => setEditingEntityName(e.target.value)}
-                      onKeyPress={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          handleEditEntitySave();
-                        }
-                      }}
-                      sx={{ flexGrow: 1 }}
-                      inputProps={{ 'aria-label': 'Edit entity name' }}
-                    />
-                    <Button
-                      size="small"
-                      onClick={handleEditEntitySave}
-                      sx={{ ml: 1 }}
-                      aria-label="Save entity name"
-                    >
-                      Save
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <Box 
-                      sx={{ 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        flexGrow: 1,
-                        gap: 2 
-                      }}
-                    >
-                      <Box 
-                        sx={{ 
-                          width: 24, 
-                          height: 24, 
-                          borderRadius: '50%', 
-                          bgcolor: entity.color,
-                          border: '1px solid',
-                          borderColor: 'divider'
-                        }} 
-                      />
-                      <Typography>{entity.name}</Typography>
-                    </Box>
-                    <Box display="flex" alignItems="center">
-                      <Select
-                        size="small"
-                        id={`entity-color-${index}`}
-                        name={`entity-color-${index}`}
-                        value={COLOR_PALETTE.includes(entity.color) ? entity.color : COLOR_PALETTE[0]}
-                        onChange={(e) => handleChangeEntityColor(entity, e.target.value)}
-                        sx={{ 
-                          width: 100, 
-                          mr: 1,
-                          '& .MuiSelect-select': {
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 1
-                          }
-                        }}
-                        aria-label={`Select color for ${entity.name}`}
-                        renderValue={(selected) => (
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <Box 
-                              sx={{ 
-                                width: 16, 
-                                height: 16, 
-                                borderRadius: '50%', 
-                                bgcolor: selected,
-                                border: '1px solid',
-                                borderColor: 'divider'
-                              }} 
-                            />
-                            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                              {selected}
-                            </Typography>
-                          </Box>
-                        )}
-                      >
-                        {COLOR_PALETTE.map((color) => (
-                          <MenuItem 
-                            key={color} 
-                            value={color}
-                            sx={{ 
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 1
-                            }}
-                            aria-label={`Color ${color}`}
-                          >
-                            <Box 
-                              sx={{ 
-                                width: 16, 
-                                height: 16, 
-                                borderRadius: '50%', 
-                                bgcolor: color,
-                                border: '1px solid',
-                                borderColor: 'divider'
-                              }} 
-                            />
-                            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                              {color}
-                            </Typography>
-                          </MenuItem>
-                        ))}
-                      </Select>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleRandomColor(entity)}
-                        title="Pick random color"
-                        sx={{ mr: 1 }}
-                        aria-label={`Pick random color for ${entity.name}`}
-                      >
-                        <PaletteIcon />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleEditEntityStart(entity)}
-                        aria-label={`Edit ${entity.name}`}
-                      >
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleRemoveEntity(entity.name)}
-                        aria-label={`Remove ${entity.name}`}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    </Box>
-                  </>
-                )}
-              </ListItem>
+          <Box sx={{ mb: 2 }}>
+            {editedProject.entity_classes.map((entity) => (
+              <Box key={entity.name} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                <TextField
+                  size="small"
+                  value={editingEntityName.entity === entity ? editingEntityName.name : entity.name}
+                  onChange={(e) => handleEntityNameInputChange(entity, e.target.value)}
+                  onBlur={() => handleEntityNameInputBlur(entity)}
+                  onKeyPress={(e) => handleEntityNameKeyPress(e, entity)}
+                  onFocus={() => setEditingEntityName({ entity, name: entity.name })}
+                  sx={{ mr: 1, flexGrow: 1 }}
+                />
+                <Box 
+                  sx={{ 
+                    width: 36, 
+                    height: 36, 
+                    borderRadius: '4px',
+                    backgroundColor: entity.color,
+                    cursor: 'pointer',
+                    border: '1px solid rgba(0, 0, 0, 0.23)',
+                    '&:hover': {
+                      opacity: 0.8
+                    }
+                  }}
+                  onClick={() => handleEditEntityColor(entity)}
+                />
+                <IconButton 
+                  size="small" 
+                  onClick={() => handleRemoveEntity(entity.name)}
+                  sx={{ ml: 1 }}
+                >
+                  <DeleteIcon />
+                </IconButton>
+              </Box>
             ))}
-          </List>
-
-          <Box display="flex" gap={2} alignItems="center" mt={2}>
+          </Box>
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
             <TextField
               label="New Entity Name"
-              size="small"
-              id="new-entity-name"
-              name="new-entity-name"
               value={newEntity.name}
               onChange={(e) => setNewEntity({ ...newEntity, name: e.target.value })}
-              onKeyPress={(e) => {
-                if (e.key === 'Enter' && newEntity.name.trim()) {
-                  e.preventDefault();
-                  handleAddEntity();
-                }
-              }}
-              inputProps={{ 'aria-label': 'New entity name' }}
-            />
-            <Button
-              variant="contained"
               size="small"
-              onClick={handleAddEntity}
-              disabled={!newEntity.name.trim()}
-              aria-label="Add new entity"
-            >
+              sx={{ flexGrow: 1 }}
+            />
+            <Box sx={{ position: 'relative' }}>
+              <Box
+                sx={{ 
+                  width: 36, 
+                  height: 36, 
+                  borderRadius: '4px',
+                  backgroundColor: newEntity.color,
+                  cursor: 'pointer',
+                  border: '1px solid rgba(0, 0, 0, 0.23)',
+                  '&:hover': {
+                    opacity: 0.8
+                  }
+                }}
+                onClick={() => setShowColorPicker(true)}
+              />
+              {showColorPicker && (
+                <Box sx={{ position: 'absolute', zIndex: 2, right: 0 }}>
+                  <Box
+                    sx={{
+                      position: 'fixed',
+                      top: 0,
+                      right: 0,
+                      bottom: 0,
+                      left: 0,
+                    }}
+                    onClick={() => {
+                      setShowColorPicker(false);
+                      if (editingEntity) {
+                        handleSaveEntityColor();
+                      }
+                    }}
+                  />
+                  <ChromePicker
+                    color={editingEntity ? editingEntityColor : newEntity.color}
+                    onChange={(color) => {
+                      if (editingEntity) {
+                        setEditingEntityColor(color.hex);
+                      } else {
+                        setNewEntity(prev => ({ ...prev, color: color.hex }));
+                      }
+                    }}
+                  />
+                </Box>
+              )}
+            </Box>
+            <Button variant="contained" onClick={handleAddEntity}>
               Add Entity
             </Button>
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setEditDialogOpen(false)} aria-label="Cancel editing project">Cancel</Button>
-          <Button onClick={handleSaveProject} variant="contained" aria-label="Save project changes">
+          <Button onClick={() => setEditDialogOpen(false)}>Cancel</Button>
+          <Button onClick={handleSaveProject} variant="contained">
             Save Changes
           </Button>
         </DialogActions>

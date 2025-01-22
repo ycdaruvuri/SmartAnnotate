@@ -41,19 +41,34 @@ const Projects = () => {
   const [showColorPicker, setShowColorPicker] = useState(false);
 
   useEffect(() => {
-    fetchProjects();
-  }, []);
+    const abortController = new AbortController();
 
-  const fetchProjects = async () => {
-    try {
-      const data = await getProjects();
-      setProjects(data);
-    } catch (error) {
-      toast.error('Error fetching projects');
-    } finally {
-      setLoading(false);
-    }
-  };
+    const fetchProjects = async () => {
+      try {
+        const data = await getProjects(abortController.signal);
+        // Only update state if the component is still mounted and request wasn't aborted
+        if (!abortController.signal.aborted) {
+          setProjects(data);
+        }
+      } catch (error) {
+        if (!abortController.signal.aborted) {
+          console.error('Error fetching projects:', error);
+          toast.error('Error fetching projects');
+        }
+      } finally {
+        if (!abortController.signal.aborted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchProjects();
+
+    // Cleanup function to abort any pending requests when component unmounts
+    return () => {
+      abortController.abort();
+    };
+  }, []); // Empty dependency array since we only want to fetch once on mount
 
   const handleOpenDialog = (project = null) => {
     if (project) {
@@ -126,7 +141,18 @@ const Projects = () => {
         await createProject(projectData);
         toast.success('Project created successfully');
       }
-      fetchProjects();
+      
+      // Fetch projects with a new AbortController
+      const abortController = new AbortController();
+      try {
+        const data = await getProjects(abortController.signal);
+        setProjects(data);
+      } catch (error) {
+        if (!abortController.signal.aborted) {
+          console.error('Error refreshing projects:', error);
+        }
+      }
+      
       handleCloseDialog();
     } catch (error) {
       toast.error(editingProject ? 'Error updating project' : 'Error creating project');
@@ -138,7 +164,17 @@ const Projects = () => {
       try {
         await deleteProject(projectId);
         toast.success('Project deleted successfully');
-        fetchProjects();
+        
+        // Fetch projects with a new AbortController
+        const abortController = new AbortController();
+        try {
+          const data = await getProjects(abortController.signal);
+          setProjects(data);
+        } catch (error) {
+          if (!abortController.signal.aborted) {
+            console.error('Error refreshing projects:', error);
+          }
+        }
       } catch (error) {
         toast.error('Error deleting project');
       }
@@ -216,91 +252,85 @@ const Projects = () => {
         ))}
       </Grid>
 
-      {/* Create/Edit Project Dialog */}
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
-        <DialogTitle>
-          {editingProject ? 'Edit Project' : 'Create New Project'}
-        </DialogTitle>
+        <DialogTitle>{editingProject ? 'Edit Project' : 'New Project'}</DialogTitle>
         <DialogContent>
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Project Name"
-            fullWidth
-            value={projectData.name}
-            onChange={(e) => setProjectData({ ...projectData, name: e.target.value })}
-          />
-          <TextField
-            margin="dense"
-            label="Description"
-            fullWidth
-            multiline
-            rows={3}
-            value={projectData.description}
-            onChange={(e) => setProjectData({ ...projectData, description: e.target.value })}
-          />
-
-          <Typography variant="h6" sx={{ mt: 3, mb: 2 }}>
-            Entity Classes
-          </Typography>
-
-          <Box mb={2}>
-            {projectData.entity_classes.map((entity) => (
-              <Chip
-                key={entity.name}
-                label={entity.name}
-                onDelete={() => handleRemoveEntity(entity.name)}
-                style={{ backgroundColor: entity.color, margin: '0 4px 4px 0' }}
-              />
-            ))}
-          </Box>
-
-          <Stack direction="row" spacing={2} alignItems="flex-start">
+          <Box sx={{ mt: 2 }}>
             <TextField
-              label="New Entity Name"
-              size="small"
-              value={newEntity.name}
-              onChange={(e) => setNewEntity({ ...newEntity, name: e.target.value })}
+              fullWidth
+              label="Project Name"
+              value={projectData.name}
+              onChange={(e) => setProjectData({ ...projectData, name: e.target.value })}
+              margin="normal"
             />
-            <Box>
-              <Button
-                variant="outlined"
-                size="small"
-                onClick={() => setShowColorPicker(!showColorPicker)}
-                style={{ backgroundColor: newEntity.color }}
-              >
-                Color
-              </Button>
-              {showColorPicker && (
-                <Box position="absolute" zIndex={2}>
-                  <Box
-                    position="fixed"
-                    top={0}
-                    right={0}
-                    bottom={0}
-                    left={0}
-                    onClick={() => setShowColorPicker(false)}
-                  />
-                  <ChromePicker
-                    color={newEntity.color}
-                    onChange={(color) => setNewEntity({ ...newEntity, color: color.hex })}
-                  />
-                </Box>
-              )}
+            <TextField
+              fullWidth
+              label="Description"
+              value={projectData.description}
+              onChange={(e) => setProjectData({ ...projectData, description: e.target.value })}
+              margin="normal"
+              multiline
+              rows={3}
+            />
+            <Typography variant="subtitle1" sx={{ mt: 2, mb: 1 }}>
+              Entity Classes
+            </Typography>
+            <Box sx={{ mb: 2 }}>
+              {projectData.entity_classes.map((entity) => (
+                <Chip
+                  key={entity.name}
+                  label={entity.name}
+                  onDelete={() => handleRemoveEntity(entity.name)}
+                  style={{ backgroundColor: entity.color, margin: '0 4px 4px 0' }}
+                />
+              ))}
             </Box>
-            <Button
-              variant="contained"
-              size="small"
-              onClick={handleAddEntity}
-            >
-              Add Entity
-            </Button>
-          </Stack>
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+              <TextField
+                label="New Entity Name"
+                value={newEntity.name}
+                onChange={(e) => setNewEntity({ ...newEntity, name: e.target.value })}
+                size="small"
+              />
+              <Box sx={{ position: 'relative' }}>
+                <Button
+                  variant="outlined"
+                  onClick={() => setShowColorPicker(!showColorPicker)}
+                  style={{
+                    backgroundColor: newEntity.color,
+                    minWidth: '64px',
+                    minHeight: '40px',
+                  }}
+                />
+                {showColorPicker && (
+                  <Box sx={{ position: 'absolute', zIndex: 2 }}>
+                    <Box
+                      sx={{
+                        position: 'fixed',
+                        top: 0,
+                        right: 0,
+                        bottom: 0,
+                        left: 0,
+                      }}
+                      onClick={() => setShowColorPicker(false)}
+                    />
+                    <ChromePicker
+                      color={newEntity.color}
+                      onChange={(color) => setNewEntity({ ...newEntity, color: color.hex })}
+                    />
+                  </Box>
+                )}
+              </Box>
+              <Button variant="contained" onClick={handleAddEntity}>
+                Add Entity
+              </Button>
+            </Box>
+          </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseDialog}>Cancel</Button>
           <Button onClick={handleSubmit} variant="contained">
-            {editingProject ? 'Save Changes' : 'Create Project'}
+            {editingProject ? 'Update' : 'Create'}
           </Button>
         </DialogActions>
       </Dialog>

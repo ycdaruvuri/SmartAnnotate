@@ -59,7 +59,9 @@ export const updateProject = async (projectId, projectData) => {
 // Document APIs
 export const createDocument = async (documentData) => {
   try {
-    const response = await axios.post(`${API_URL}/documents/`, documentData);
+    console.log('Creating document with data:', documentData);
+    const response = await axios.post(`${API_URL}/documents`, documentData);
+    console.log('Created document:', response.data);
     return response.data;
   } catch (error) {
     console.error('Error creating document:', error);
@@ -69,6 +71,7 @@ export const createDocument = async (documentData) => {
 
 export const uploadDocument = async (projectId, file) => {
   try {
+    console.log('Uploading document for project:', projectId);
     const formData = new FormData();
     formData.append('file', file);
     formData.append('project_id', projectId);
@@ -82,6 +85,7 @@ export const uploadDocument = async (projectId, file) => {
         },
       }
     );
+    console.log('Uploaded document:', response.data);
     return response.data;
   } catch (error) {
     console.error('Error uploading document:', error);
@@ -89,9 +93,17 @@ export const uploadDocument = async (projectId, file) => {
   }
 };
 
-export const getProjectDocuments = async (projectId, skip = 0, limit = 10) => {
+export const getProjectDocuments = async (projectId, params = { skip: 0, limit: -1 }) => {
   try {
-    const response = await axios.get(`${API_URL}/projects/${projectId}/documents?skip=${skip}&limit=${limit}`);
+    console.log('Fetching documents with params:', params);
+    const url = `${API_URL}/documents/project/${projectId}`;  
+    const response = await axios.get(url, {
+      params: {
+        skip: params.skip,
+        limit: params.limit
+      }
+    });
+    console.log(`Fetched ${response.data.length} documents from ${url}`);
     return response.data;
   } catch (error) {
     console.error('Error fetching project documents:', error);
@@ -101,7 +113,6 @@ export const getProjectDocuments = async (projectId, skip = 0, limit = 10) => {
 
 export const getDocument = async (documentId) => {
   try {
-    // Make sure documentId is a valid string
     if (!documentId || typeof documentId !== 'string') {
       throw new Error('Invalid document ID');
     }
@@ -130,7 +141,7 @@ export const updateDocument = async (documentId, documentData) => {
 export const exportProjectData = async (projectId) => {
   try {
     const response = await axios.get(`${API_URL}/projects/${projectId}/export`, {
-      responseType: 'blob',
+      responseType: 'blob'
     });
     return response.data;
   } catch (error) {

@@ -1,12 +1,11 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Container,
   Paper,
-  Typography,
   Box,
+  Typography,
   Button,
-  Chip,
   CircularProgress,
   Dialog,
   DialogTitle,
@@ -17,87 +16,49 @@ import {
   List,
   ListItem,
   ListItemText,
-  IconButton,
   InputAdornment,
+  Chip,
+  IconButton,
 } from '@mui/material';
-import NavigateNextIcon from '@mui/icons-material/NavigateNext';
-import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore';
-import SaveIcon from '@mui/icons-material/Save';
-import CloseIcon from '@mui/icons-material/Close';
-import SearchIcon from '@mui/icons-material/Search';
-import { getDocument, updateDocument, getProjectDocuments, getProject } from '../../utils/api';
+import {
+  NavigateBefore as NavigateBeforeIcon,
+  NavigateNext as NavigateNextIcon,
+  Save as SaveIcon,
+  Search as SearchIcon,
+  Close as CloseIcon,
+} from '@mui/icons-material';
 import { toast } from 'react-toastify';
+import { getDocument, updateDocument, getProject, getProjectDocuments } from '../../utils/api';
 
 const AnnotationTool = () => {
   const { documentId } = useParams();
   const navigate = useNavigate();
   const [docData, setDocData] = useState(null);
-  const [projectDocuments, setProjectDocuments] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [projectData, setProjectData] = useState(null);
   const [entities, setEntities] = useState([]);
   const [selectedEntity, setSelectedEntity] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [openConfirm, setOpenConfirm] = useState(false);
   const [nextDocId, setNextDocId] = useState(null);
+  const [projectDocuments, setProjectDocuments] = useState([]);
   const [anchorEl, setAnchorEl] = useState(null);
-  const [selectedEntityIndex, setSelectedEntityIndex] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [focusedEntityRef, setFocusedEntityRef] = useState(null);
+  const [focusedEntityIndex, setFocusedEntityIndex] = useState(null);
   const textContentRef = useRef(null);
-
-  const handleKeyPress = useCallback((event) => {
-    // Skip if we're in a text input
-    if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
-      return;
-    }
-
-    // Handle both regular number keys and numpad keys
-    let key = event.key;
-    
-    // Convert numpad keys to regular numbers
-    if (key.startsWith('Numpad')) {
-      key = key.replace('Numpad', '');
-    }
-    
-    if (docData?.project?.entity_classes) {
-      const numKey = parseInt(key);
-      if (!isNaN(numKey) && numKey >= 1 && numKey <= 9) {
-        const index = numKey - 1;
-        if (index < docData.project.entity_classes.length) {
-          event.preventDefault(); // Prevent any default behavior
-          setSelectedEntity(docData.project.entity_classes[index]);
-          // Show a toast notification to indicate the selected class
-          toast.info(`Selected: ${docData.project.entity_classes[index].name}`, {
-            autoClose: 800 // Even shorter duration for this notification
-          });
-        }
-      }
-    }
-  }, [docData]);
 
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const doc = await getDocument(documentId);
-      console.log('Document data:', doc);
       
-      if (!doc) {
-        toast.error('Document not found');
-        navigate('/projects');
-        return;
-      }
-
-      // Get project data if not included in document
-      let projectData = doc.project;
-      if (!projectData && doc.project_id) {
-        try {
-          projectData = await getProject(doc.project_id);
-          doc.project = projectData;
-        } catch (error) {
-          console.error('Error fetching project:', error);
-          toast.error('Error loading project data');
-          return;
-        }
-      }
+      // First get the document to get its project_id
+      const doc = await getDocument(documentId);
+      console.log('Raw document data:', doc);
+      
+      // Then fetch project data and documents in parallel
+      const [projectData, projectDocs] = await Promise.all([
+        getProject(doc.project_id),
+        getProjectDocuments(doc.project_id)
+      ]);
 
       if (!projectData) {
         toast.error('Project data not found');
@@ -105,28 +66,25 @@ const AnnotationTool = () => {
         return;
       }
 
+      // Update entity colors based on project entity classes
+      const updatedEntities = (doc.annotations || []).map(annotation => ({
+        start: annotation.start_index,
+        end: annotation.end_index,
+        label: annotation.entity,
+        text: annotation.text,
+        color: projectData.entity_classes.find(ec => ec.name === annotation.entity)?.color || '#ffeb3b'
+      }));
+
+      console.log('Loaded entities:', updatedEntities);
+
+      setProjectData(projectData);
       setDocData(doc);
-      setEntities(doc.entities || []);
+      setEntities(updatedEntities);
+      setProjectDocuments(projectDocs);
       
-      // Fetch other documents from the same project
-      if (doc.project_id) {
-        try {
-          const docs = await getProjectDocuments(doc.project_id);
-          setProjectDocuments(docs);
-        } catch (error) {
-          console.error('Error fetching project documents:', error);
-          toast.error('Error loading project documents');
-        }
-      }
     } catch (error) {
       console.error('Error fetching document:', error);
-      if (error.response?.status === 404) {
-        toast.error('Document not found');
-      } else if (error.response?.status === 403) {
-        toast.error('Not authorized to access this document');
-      } else {
-        toast.error('Error loading document');
-      }
+      toast.error('Error loading document');
       navigate('/projects');
     } finally {
       setLoading(false);
@@ -134,125 +92,114 @@ const AnnotationTool = () => {
   }, [documentId, navigate]);
 
   useEffect(() => {
-    if (!documentId) {
-      toast.error('No document ID provided');
-      navigate('/projects');
-      return;
-    }
     fetchData();
-    document.addEventListener('keydown', handleKeyPress);
-    return () => {
-      document.removeEventListener('keydown', handleKeyPress);
-    };
-  }, [documentId, fetchData, navigate]);
+  }, [fetchData]);
 
-  const handleTextSelection = () => {
+  const handleKeyPress = useCallback((e) => {
+    if (e.key >= '1' && e.key <= '9') {
+      const index = parseInt(e.key) - 1;
+      if (projectData?.entity_classes[index]) {
+        setSelectedEntity(projectData.entity_classes[index]);
+      }
+    }
+  }, [projectData]);
+
+  useEffect(() => {
+    document.addEventListener('keydown', handleKeyPress);
+    return () => document.removeEventListener('keydown', handleKeyPress);
+  }, [handleKeyPress]);
+
+  const handleEntityClick = useCallback((e, index) => {
+    e.stopPropagation();
+    setFocusedEntityIndex(index);
+    setAnchorEl(e.currentTarget);
+  }, []);
+
+  const handlePopoverClose = useCallback(() => {
+    setAnchorEl(null);
+    setFocusedEntityIndex(null);
+  }, []);
+
+  const removeEntity = useCallback((index) => {
+    setEntities(prev => prev.filter((_, i) => i !== index));
+    handlePopoverClose();
+  }, [handlePopoverClose]);
+
+  const handleClassChange = useCallback((entityClass) => {
+    if (focusedEntityIndex !== null) {
+      setEntities(prev => prev.map((entity, index) => {
+        if (index === focusedEntityIndex) {
+          return {
+            ...entity,
+            label: entityClass.name,
+            color: entityClass.color
+          };
+        }
+        return entity;
+      }));
+    }
+    handlePopoverClose();
+  }, [focusedEntityIndex, handlePopoverClose]);
+
+  const handleTextSelection = useCallback(() => {
     if (!selectedEntity) return;
 
     const selection = window.getSelection();
-    const text = selection.toString().trim();
-    
-    if (!text) return;
-    
+    if (!selection.toString().trim()) return;
+
     const range = selection.getRangeAt(0);
+    const textContent = textContentRef.current;
+
+    if (!textContent.contains(range.startContainer) || !textContent.contains(range.endContainer)) {
+      return;
+    }
+
     const preSelectionRange = range.cloneRange();
-    preSelectionRange.selectNodeContents(textContentRef.current);
+    preSelectionRange.selectNodeContents(textContent);
     preSelectionRange.setEnd(range.startContainer, range.startOffset);
     const start = preSelectionRange.toString().length;
 
+    const end = start + range.toString().length;
+
     const newEntity = {
       start,
-      end: start + text.length,
+      end,
       label: selectedEntity.name,
-      text,
-      color: selectedEntity.color,
+      text: selection.toString(),
+      color: selectedEntity.color
     };
 
-    setEntities([...entities, newEntity].sort((a, b) => a.start - b.start));
+    console.log('New entity:', newEntity);
+    setEntities(prev => [...prev, newEntity]);
     selection.removeAllRanges();
-  };
+  }, [selectedEntity]);
 
-  const handleWordClick = useCallback((event) => {
-    if (!selectedEntity) return;
-
-    const word = event.target.innerText;
-    const textContent = textContentRef.current.innerText;
-    const start = textContent.indexOf(word);
-
-    if (start === -1) return;
-
-    const newEntity = {
-      start,
-      end: start + word.length,
-      label: selectedEntity.name,
-      text: word,
-      color: selectedEntity.color,
-    };
-
-    setEntities([...entities, newEntity].sort((a, b) => a.start - b.start));
-  }, [selectedEntity, entities]);
-
-  const removeEntity = useCallback((index) => {
-    setEntities(entities.filter((_, i) => i !== index));
-  }, [entities]);
-
-  const handleEntityClick = (event, index) => {
-    event.stopPropagation();
-    setFocusedEntityRef(event.currentTarget);
-    setSelectedEntityIndex(index);
-    setAnchorEl(event.currentTarget);
-  };
-
-  const handleClassChange = (newClass) => {
-    if (selectedEntityIndex === null) return;
-
-    const updatedEntities = [...entities];
-    updatedEntities[selectedEntityIndex] = {
-      ...updatedEntities[selectedEntityIndex],
-      label: newClass.name,
-      color: newClass.color,
-    };
-    setEntities(updatedEntities);
-    handlePopoverClose();
-  };
-
-  const handlePopoverClose = () => {
-    if (focusedEntityRef) {
-      // Return focus to the entity that was clicked
-      setTimeout(() => {
-        focusedEntityRef.focus();
-      }, 0);
-    }
-    setAnchorEl(null);
-    setSelectedEntityIndex(null);
-    setSearchTerm('');
-    setFocusedEntityRef(null);
-  };
-
-  const handleSave = async () => {
-    if (!docData) return;
-
+  const handleSave = useCallback(async () => {
     try {
-      await updateDocument(documentId, {
-        ...docData,
-        entities,
-        status: 'completed',
-      });
-      toast.success('Annotations saved successfully!');
+      const annotations = entities.map(entity => ({
+        start_index: entity.start,
+        end_index: entity.end,
+        entity: entity.label,
+        text: entity.text
+      }));
+
+      console.log('Saving annotations:', annotations);
+      await updateDocument(documentId, { annotations });
+      
+      toast.success('Annotations saved successfully');
       
       if (nextDocId) {
         navigate(`/annotate/${nextDocId}`);
-      } else {
+        setNextDocId(null);
         setOpenConfirm(false);
-        navigate(`/projects/${docData.project_id}`);
       }
     } catch (error) {
       console.error('Error saving annotations:', error);
       toast.error('Failed to save annotations');
     }
-  };
+  }, [documentId, entities, navigate, nextDocId]);
 
-  const navigateDocument = (direction) => {
+  const navigateDocument = useCallback((direction) => {
     const currentIndex = projectDocuments.findIndex(doc => doc.id === documentId);
     const nextIndex = currentIndex + direction;
     
@@ -264,81 +211,73 @@ const AnnotationTool = () => {
         navigate(`/annotate/${projectDocuments[nextIndex].id}`);
       }
     }
-  };
+  }, [documentId, entities.length, navigate, projectDocuments]);
 
-  const renderText = useCallback(() => {
-    if (!docData?.text) return '';
+  const renderedText = useMemo(() => {
+    if (!docData?.text) return null;
 
-    let text = docData.text;
-    let result = [];
+    const text = docData.text;
+    const sortedEntities = [...entities].sort((a, b) => a.start - b.start);
+    const result = [];
     let lastIndex = 0;
 
-    const sortedEntities = [...entities].sort((a, b) => a.start - b.start);
+    console.log('Rendering text with entities:', sortedEntities);
 
     sortedEntities.forEach((entity, index) => {
       if (entity.start > lastIndex) {
         result.push(
-          <span key={`text-${index}`} onDoubleClick={handleWordClick}>
+          <span key={`text-${index}`}>
             {text.slice(lastIndex, entity.start)}
           </span>
         );
       }
 
       result.push(
-        <Box
-          component="mark"
+        <mark
           key={`entity-${index}`}
-          sx={{
+          style={{
             backgroundColor: entity.color,
-            padding: '0 2px',
+            padding: '2px 4px',
+            margin: '0 1px',
             borderRadius: '3px',
-            position: 'relative',
             cursor: 'pointer',
-            '&:hover': {
-              opacity: 0.8,
-            },
-            '&:focus': {
-              outline: '2px solid #000',
-              outlineOffset: '2px',
-            },
+            position: 'relative',
+            display: 'inline-block'
           }}
           onClick={(e) => handleEntityClick(e, index)}
-          tabIndex={0}
-          role="button"
-          aria-label={`${entity.text} (${entity.label})`}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              handleEntityClick(e, index);
-            }
-          }}
         >
           {text.slice(entity.start, entity.end)}
           <IconButton
             size="small"
             sx={{
               position: 'absolute',
-              top: -6,
-              right: -6,
+              top: -8,
+              right: -8,
               padding: 0,
-              width: '12px',
-              height: '12px',
-              minWidth: '12px',
-              minHeight: '12px',
+              width: '16px',
+              height: '16px',
+              minWidth: '16px',
+              minHeight: '16px',
               backgroundColor: 'white',
               border: '1px solid #ccc',
+              opacity: 0,
+              transition: 'opacity 0.2s',
               '&:hover': {
                 backgroundColor: '#f5f5f5',
+                opacity: 1,
+              },
+              'mark:hover &': {
+                opacity: 1,
               },
             }}
             onClick={(e) => {
               e.stopPropagation();
               removeEntity(index);
             }}
-            aria-label={`Remove ${entity.label} annotation`}
           >
-            <CloseIcon sx={{ fontSize: 8 }} />
+            <CloseIcon sx={{ fontSize: 12 }} />
           </IconButton>
-        </Box>
+        </mark>
       );
 
       lastIndex = entity.end;
@@ -346,71 +285,56 @@ const AnnotationTool = () => {
 
     if (lastIndex < text.length) {
       result.push(
-        <span key="text-end" onDoubleClick={handleWordClick}>
+        <span key="text-end">
           {text.slice(lastIndex)}
         </span>
       );
     }
 
     return result;
-  }, [docData, entities]);
+  }, [docData?.text, entities, handleEntityClick, removeEntity]);
 
-  const filteredClasses = docData?.project?.entity_classes.filter(ec =>
-    ec.name.toLowerCase().includes(searchTerm.toLowerCase())
-  ) || [];
+  const filteredClasses = useMemo(() => {
+    if (!projectData) return [];
+    return projectData.entity_classes.filter(ec =>
+      ec.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [projectData, searchTerm]);
 
   if (loading) {
     return (
-      <Container sx={{ mt: 4, textAlign: 'center' }}>
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '80vh' }}>
         <CircularProgress />
-      </Container>
-    );
-  }
-
-  if (!docData || !docData.project) {
-    return (
-      <Container sx={{ mt: 4, textAlign: 'center' }}>
-        <Typography variant="h6" color="error">
-          Document not found or failed to load
-        </Typography>
-        <Button
-          variant="contained"
-          sx={{ mt: 2 }}
-          onClick={() => navigate('/projects')}
-        >
-          Back to Projects
-        </Button>
-      </Container>
+      </Box>
     );
   }
 
   return (
-    <Container sx={{ mt: 4 }}>
+    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
       <Paper sx={{ p: 3, mb: 3 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Typography variant="h5">Document Annotation</Typography>
-          <Box sx={{ display: 'flex', gap: 2 }}>
+          <Box>
             <Button
-              variant="outlined"
               startIcon={<NavigateBeforeIcon />}
               onClick={() => navigateDocument(-1)}
+              disabled={!projectDocuments.length || projectDocuments.findIndex(doc => doc.id === documentId) === 0}
             >
               Previous
             </Button>
             <Button
-              variant="outlined"
               endIcon={<NavigateNextIcon />}
               onClick={() => navigateDocument(1)}
+              disabled={!projectDocuments.length || projectDocuments.findIndex(doc => doc.id === documentId) === projectDocuments.length - 1}
             >
               Next
             </Button>
             <Button
-              variant="contained"
               startIcon={<SaveIcon />}
-              onClick={() => {
-                setNextDocId(null);
-                setOpenConfirm(true);
-              }}
+              variant="contained"
+              color="primary"
+              onClick={handleSave}
+              sx={{ ml: 2 }}
             >
               Save
             </Button>
@@ -422,7 +346,7 @@ const AnnotationTool = () => {
             Entity Classes (1-9 keys to select):
           </Typography>
           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-            {docData.project.entity_classes.map((ec, index) => (
+            {projectData?.entity_classes.map((ec, index) => (
               <Chip
                 key={index}
                 label={`${index + 1}. ${ec.name}`}
@@ -430,6 +354,9 @@ const AnnotationTool = () => {
                   backgroundColor: ec.color,
                   cursor: 'pointer',
                   border: selectedEntity?.name === ec.name ? '2px solid black' : 'none',
+                  '&:hover': {
+                    opacity: 0.8,
+                  },
                 }}
                 onClick={() => setSelectedEntity(ec)}
               />
@@ -437,54 +364,45 @@ const AnnotationTool = () => {
           </Box>
         </Box>
 
-        <Paper
-          elevation={0}
+        <Box
+          ref={textContentRef}
           sx={{
             p: 2,
+            border: '1px solid #ccc',
+            borderRadius: 1,
+            minHeight: '200px',
+            whiteSpace: 'pre-wrap',
             backgroundColor: '#f5f5f5',
             cursor: 'text',
             lineHeight: 1.8,
+            '& mark': {
+              textDecoration: 'none',
+            },
           }}
+          onMouseUp={handleTextSelection}
         >
-          <div
-            id="text-content"
-            ref={textContentRef}
-            onMouseUp={handleTextSelection}
-          >
-            {renderText()}
-          </div>
-        </Paper>
+          {renderedText}
+        </Box>
       </Paper>
 
       <Dialog
         open={openConfirm}
         onClose={() => setOpenConfirm(false)}
-        aria-labelledby="save-dialog-title"
-        disablePortal={false}
-        keepMounted={false}
       >
-        <DialogTitle id="save-dialog-title">Save Changes</DialogTitle>
+        <DialogTitle>Save Changes</DialogTitle>
         <DialogContent>
           <Typography>
             Do you want to save your changes before moving to the next document?
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button 
-            onClick={() => {
-              setOpenConfirm(false);
-              if (nextDocId) navigate(`/annotate/${nextDocId}`);
-            }}
-            aria-label="Discard changes and continue"
-          >
+          <Button onClick={() => {
+            setOpenConfirm(false);
+            if (nextDocId) navigate(`/annotate/${nextDocId}`);
+          }}>
             Don't Save
           </Button>
-          <Button 
-            onClick={handleSave} 
-            variant="contained" 
-            color="primary"
-            aria-label="Save changes and continue"
-          >
+          <Button onClick={handleSave} variant="contained" color="primary">
             Save
           </Button>
         </DialogActions>
@@ -502,36 +420,8 @@ const AnnotationTool = () => {
           vertical: 'top',
           horizontal: 'left',
         }}
-        slotProps={{
-          paper: {
-            sx: { 
-              width: 200, // Even smaller width
-              '& .MuiListItem-root': {
-                py: 0.25, // Even less padding
-                minHeight: '24px', // Smaller minimum height
-              },
-              '& .MuiListItemText-primary': {
-                fontSize: '0.75rem', // Even smaller font (12px)
-              },
-            },
-            elevation: 8,
-            'aria-label': 'Change entity class',
-          },
-        }}
-        keepMounted={false}
-        disablePortal={false}
-        disableAutoFocus={false}
-        disableEnforceFocus={false}
-        disableRestoreFocus={false}
       >
-        <Box 
-          sx={{ p: 0.5 }} // Even less padding
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') {
-              handlePopoverClose();
-            }
-          }}
-        >
+        <Box sx={{ p: 1, width: 250 }}>
           <TextField
             fullWidth
             size="small"
@@ -541,64 +431,31 @@ const AnnotationTool = () => {
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
-                  <SearchIcon sx={{ fontSize: '0.75rem' }} />
+                  <SearchIcon />
                 </InputAdornment>
               ),
-              sx: {
-                fontSize: '0.75rem', // Smaller font size for input
-                '& .MuiInputBase-input': {
-                  padding: '4px 8px', // Smaller padding
-                },
-              },
             }}
-            sx={{ mb: 0.25 }} // Less margin
-            aria-label="Search entity classes"
           />
-          <List 
-            sx={{ 
-              maxHeight: 200, // Smaller max height
-              overflow: 'auto',
-              '& .MuiListItem-root': {
-                minHeight: '24px', // Smaller minimum height
-              },
-            }}
-            role="listbox"
-            aria-label="Entity classes list"
-            dense
-          >
+          <List dense>
             {filteredClasses.map((ec, index) => (
               <ListItem
                 key={index}
                 button
                 onClick={() => handleClassChange(ec)}
-                sx={{
-                  '&:hover': {
-                    backgroundColor: `${ec.color}40`,
-                  },
-                }}
-                role="option"
-                aria-selected={selectedEntity?.name === ec.name}
-                dense
               >
-                <ListItemText 
-                  primary={`${index + 1}. ${ec.name}`}
-                  primaryTypographyProps={{ 
-                    fontSize: '0.75rem',
-                    lineHeight: 1.1,
-                  }}
+                <ListItemText
+                  primary={ec.name}
                   secondary={
                     <Box
                       component="span"
                       sx={{
-                        width: 10,
-                        height: 10,
+                        width: 16,
+                        height: 16,
                         backgroundColor: ec.color,
                         display: 'inline-block',
                         borderRadius: '50%',
                         marginRight: 1,
                       }}
-                      role="presentation"
-                      aria-hidden="true"
                     />
                   }
                 />
