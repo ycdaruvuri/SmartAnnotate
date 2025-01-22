@@ -35,6 +35,8 @@ import {
   Delete as DeleteIcon,
   Close as CloseIcon,
   Visibility as VisibilityIcon,
+  CheckCircle as CheckCircleIcon,
+  Circle as CircleIcon,
 } from '@mui/icons-material';
 import { ChromePicker } from 'react-color';
 import { toast } from 'react-toastify';
@@ -445,32 +447,36 @@ const ProjectView = () => {
               <Grid item xs={12} sm={6} md={4} key={doc.id}>
                 <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                   <CardContent sx={{ flexGrow: 1 }}>
-                    <Typography variant="h6" component="h2" gutterBottom noWrap>
-                      Document {doc.id}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {doc.text?.substring(0, 150)}
-                      {doc.text?.length > 150 ? '...' : ''}
+                    <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
+                      {doc.text?.substring(0, 200)}
+                      {doc.text?.length > 200 ? '...' : ''}
                     </Typography>
                     <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
                       Created: {new Date(doc.created_at).toLocaleDateString()}
                     </Typography>
                   </CardContent>
-                  <CardActions>
-                    <Button
-                      size="small"
-                      variant="contained"
-                      onClick={() => navigate(`/annotate/${doc.id}`)}
-                    >
-                      Annotate
-                    </Button>
-                    <Button
-                      size="small"
-                      variant="contained"
-                      onClick={() => handleDocumentView(doc)}
-                    >
-                      View
-                    </Button>
+                  <CardActions sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      <Button
+                        size="small"
+                        variant="contained"
+                        onClick={() => navigate(`/annotate/${doc.id}`)}
+                      >
+                        Annotate
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="contained"
+                        onClick={() => handleDocumentView(doc)}
+                      >
+                        View
+                      </Button>
+                    </Box>
+                    {doc.status === 'completed' ? (
+                      <CheckCircleIcon sx={{ color: '#4caf50', fontSize: 32 }} />
+                    ) : (
+                      <CircleIcon sx={{ color: '#9e9e9e', fontSize: 32 }} />
+                    )}
                   </CardActions>
                 </Card>
               </Grid>
@@ -483,40 +489,42 @@ const ProjectView = () => {
                 key={doc.id}
                 divider
                 secondaryAction={
-                  <Button
-                    size="small"
-                    variant="contained"
-                    onClick={() => navigate(`/annotate/${doc.id}`)}
-                  >
-                    Annotate
-                  </Button>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Button
+                      size="small"
+                      variant="contained"
+                      onClick={() => handleDocumentView(doc)}
+                    >
+                      View
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="contained"
+                      onClick={() => navigate(`/annotate/${doc.id}`)}
+                    >
+                      Annotate
+                    </Button>
+                    {doc.status === 'completed' ? (
+                      <CheckCircleIcon sx={{ color: '#4caf50', fontSize: 32 }} />
+                    ) : (
+                      <CircleIcon sx={{ color: '#9e9e9e', fontSize: 32 }} />
+                    )}
+                  </Box>
                 }
               >
                 <ListItemText
                   primary={
-                    <Typography variant="h6" component="h2">
-                      Document {doc.id}
+                    <Typography variant="body2" color="text.secondary">
+                      {doc.text?.substring(0, 200)}
+                      {doc.text?.length > 200 ? '...' : ''}
                     </Typography>
                   }
                   secondary={
-                    <>
-                      <Typography variant="body2" color="text.secondary" paragraph>
-                        {doc.text?.substring(0, 150)}
-                        {doc.text?.length > 150 ? '...' : ''}
-                      </Typography>
-                      <Typography variant="caption" color="textSecondary">
-                        Created: {new Date(doc.created_at).toLocaleDateString()}
-                      </Typography>
-                    </>
+                    <Typography variant="caption" color="textSecondary">
+                      Created: {new Date(doc.created_at).toLocaleDateString()}
+                    </Typography>
                   }
                 />
-                <Button
-                  size="small"
-                  variant="contained"
-                  onClick={() => handleDocumentView(doc)}
-                >
-                  View
-                </Button>
               </ListItem>
             ))}
           </List>

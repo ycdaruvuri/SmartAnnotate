@@ -32,6 +32,8 @@ import {
   NavigateNext as NavigateNextIcon,
   Save as SaveIcon,
   Search as SearchIcon,
+  Check as CheckIcon,
+  ArrowBack as ArrowBackIcon,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import {
@@ -59,6 +61,7 @@ const AnnotationTool = () => {
   const [documentChanges, setDocumentChanges] = useState(new Map());
   const [showExitDialog, setShowExitDialog] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState(null);
+  const [isComplete, setIsComplete] = useState(false);
   const textContentRef = React.useRef(null);
 
   const fetchData = useCallback(async () => {
@@ -123,6 +126,7 @@ const AnnotationTool = () => {
         }
         return newMap;
       });
+      setIsComplete(docData.status === 'completed');
     }
   }, [docData, documentId]);
 
@@ -372,6 +376,21 @@ const AnnotationTool = () => {
     }
   }, [unsavedDocuments, documentChanges, pendingNavigation, navigate]);
 
+  const handleMarkComplete = async () => {
+    setIsComplete(!isComplete);
+    try {
+      await updateDocument(documentId, {
+        ...docData,
+        status: !isComplete ? 'completed' : 'in_progress'
+      });
+      toast.success(!isComplete ? 'Document marked as complete' : 'Document marked as in progress');
+    } catch (error) {
+      console.error('Error updating document status:', error);
+      toast.error('Failed to update document status');
+      setIsComplete(!isComplete); // revert the state if update fails
+    }
+  };
+
   const hasUnsavedChanges = unsavedDocuments.has(documentId);
 
   const navigateDocument = useCallback((direction) => {
@@ -390,6 +409,15 @@ const AnnotationTool = () => {
       }
     }
   }, [projectDocuments, documentId, navigate, hasUnsavedChanges, autoSave, handleSave]);
+
+  const handleBack = () => {
+    if (hasUnsavedChanges) {
+      setShowExitDialog(true);
+      setPendingNavigation(() => () => navigate(`/projects/${docData.project_id}`));
+    } else {
+      navigate(`/projects/${docData.project_id}`);
+    }
+  };
 
   useEffect(() => {
     const handleBeforeUnload = (e) => {
@@ -551,9 +579,15 @@ const AnnotationTool = () => {
   return (
     <Box maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
       <Paper sx={{ p: 3, mb: 3 }}>
-        <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography variant="h5">Document Annotation</Typography>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Button
+            variant="outlined"
+            startIcon={<ArrowBackIcon />}
+            onClick={handleBack}
+          >
+            Back to Project
+          </Button>
+          <Box sx={{ display: 'flex', gap: 2 }}>
             <FormControlLabel
               control={
                 <Checkbox
@@ -563,6 +597,14 @@ const AnnotationTool = () => {
               }
               label="AutoSave"
             />
+            <Button
+              variant="contained"
+              color={isComplete ? "success" : "primary"}
+              onClick={handleMarkComplete}
+              startIcon={isComplete ? <CheckIcon /> : null}
+            >
+              {isComplete ? "Marked Complete" : "Mark as Complete"}
+            </Button>
             {!autoSave && unsavedDocuments.size > 0 && (
               <Button
                 variant="contained"
@@ -570,7 +612,7 @@ const AnnotationTool = () => {
                 startIcon={<SaveIcon />}
                 onClick={handleSaveAll}
               >
-                Save All ({unsavedDocuments.size})
+                Save All
               </Button>
             )}
             <Button
@@ -694,7 +736,10 @@ const AnnotationTool = () => {
       {/* Exit Confirmation Dialog */}
       <Dialog
         open={showExitDialog}
-        onClose={() => setShowExitDialog(false)}
+        onClose={() => {
+          setShowExitDialog(false);
+          setPendingNavigation(null);
+        }}
       >
         <DialogTitle>Unsaved Changes</DialogTitle>
         <DialogContent>
@@ -703,11 +748,37 @@ const AnnotationTool = () => {
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleExitCancel}>
+          <Button 
+            onClick={() => {
+              setShowExitDialog(false);
+              setPendingNavigation(null);
+            }}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={() => {
+              if (pendingNavigation) {
+                pendingNavigation();
+              }
+              setShowExitDialog(false);
+              setPendingNavigation(null);
+            }}
+          >
             Don't Save
           </Button>
-          <Button onClick={() => handleExitConfirm(true)} variant="contained" color="primary" autoFocus>
-            Save
+          <Button
+            variant="contained"
+            onClick={async () => {
+              await handleSaveAll();
+              if (pendingNavigation) {
+                pendingNavigation();
+              }
+              setShowExitDialog(false);
+              setPendingNavigation(null);
+            }}
+          >
+            Save & Exit
           </Button>
         </DialogActions>
       </Dialog>

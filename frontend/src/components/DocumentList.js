@@ -82,7 +82,7 @@ function DocumentList() {
           <TableBody>
             {documents.map((doc) => (
               <TableRow key={doc.id}>
-                <TableCell>{doc.text.substring(0, 100)}...</TableCell>
+                <TableCell sx={{ maxWidth: '60%' }}>{doc.text.substring(0, 150)}...</TableCell>
                 <TableCell>{doc.status}</TableCell>
                 <TableCell>{new Date(doc.created_at).toLocaleDateString()}</TableCell>
                 <TableCell>
