@@ -80,11 +80,17 @@ export const createDocument = async (documentData) => {
   }
 };
 
-export const uploadDocument = async (projectId, file) => {
+export const uploadDocument = async (projectId, files) => {
   try {
-    console.log('Uploading document for project:', projectId);
+    console.log('Uploading documents for project:', projectId);
     const formData = new FormData();
-    formData.append('file', file);
+    
+    // Handle both single file and multiple files
+    if (Array.isArray(files)) {
+      files.forEach(file => formData.append('files', file));
+    } else {
+      formData.append('files', files);
+    }
     formData.append('project_id', projectId);
     
     const response = await axios.post(
@@ -96,10 +102,10 @@ export const uploadDocument = async (projectId, file) => {
         },
       }
     );
-    console.log('Uploaded document:', response.data);
+    console.log('Upload response:', response.data);
     return response.data;
   } catch (error) {
-    console.error('Error uploading document:', error);
+    console.error('Error uploading documents:', error);
     throw error;
   }
 };

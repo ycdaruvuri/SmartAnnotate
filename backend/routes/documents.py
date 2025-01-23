@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Request
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, Request
 from models.document import DocumentCreate, Document, DocumentUpdate
 from utils.auth import get_current_user
 from config.database import documents_collection, projects_collection
@@ -46,11 +46,12 @@ async def create_document(document: DocumentCreate, current_user = Depends(get_c
 
 @router.post("/upload")
 async def upload_document(
-    project_id: str,
-    file: UploadFile = File(...),
+    project_id: str = Form(...),
+    files: List[UploadFile] = File(...),
     current_user = Depends(get_current_user)
 ):
-    print(f"Uploading document for project {project_id}")
+    print(f"Uploading {len(files)} documents for project {project_id}")
+    
     try:
         # Verify project exists and belongs to user
         project = projects_collection.find_one({
@@ -58,32 +59,78 @@ async def upload_document(
             "user_id": str(current_user["_id"])
         })
         if not project:
+            print(f"Project not found. Project ID: {project_id}, User ID: {current_user['_id']}")
             raise HTTPException(status_code=404, detail="Project not found")
         
-        content = await file.read()
-        text = content.decode()
+        uploaded_documents = []
+        failed_documents = []
         
-        doc_dict = {
-            "text": text,
-            "project_id": str(project_id),
-            "filename": file.filename,
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow(),
-            "annotations": [],
-            "entities": [],
-            "status": "pending"
+        for file in files:
+            print(f"Processing file: {file.filename}, Content-Type: {file.content_type}")
+            try:
+                content = await file.read()
+                # Try to decode with UTF-8 first
+                try:
+                    text = content.decode('utf-8')
+                except UnicodeDecodeError:
+                    # If UTF-8 fails, try with latin-1 as a fallback
+                    text = content.decode('latin-1')
+                    
+                print(f"Successfully decoded file content. Content length: {len(text)}")
+                
+                doc_dict = {
+                    "text": text,
+                    "project_id": str(project_id),
+                    "filename": file.filename,
+                    "created_at": datetime.utcnow(),
+                    "updated_at": datetime.utcnow(),
+                    "annotations": [],
+                    "entities": [],
+                    "status": "pending"
+                }
+                
+                print(f"Inserting document with filename: {file.filename}")
+                result = documents_collection.insert_one(doc_dict)
+                doc_dict["id"] = str(result.inserted_id)
+                
+                uploaded_documents.append(Document(**doc_dict))
+                print(f"Successfully uploaded document: {file.filename}")
+                
+            except UnicodeDecodeError as e:
+                print(f"Error decoding file {file.filename}: {str(e)}")
+                failed_documents.append({
+                    "filename": file.filename,
+                    "error": "Unable to decode file content. Please ensure the file is a valid text file."
+                })
+            except Exception as e:
+                print(f"Error processing file {file.filename}: {str(e)}")
+                failed_documents.append({
+                    "filename": file.filename,
+                    "error": str(e)
+                })
+            
+        response = {
+            "success": True,
+            "uploaded_count": len(uploaded_documents),
+            "uploaded_documents": uploaded_documents,
+            "failed_count": len(failed_documents),
+            "failed_documents": failed_documents
         }
         
-        print(f"Inserting uploaded document: {doc_dict}")
-        result = documents_collection.insert_one(doc_dict)
-        doc_dict["id"] = str(result.inserted_id)
-        
-        print(f"Successfully created uploaded document with ID: {doc_dict['id']}")
-        return Document(**doc_dict)
-        
+        if len(failed_documents) > 0 and len(uploaded_documents) == 0:
+            # If all files failed, return a 400 status
+            raise HTTPException(status_code=400, detail=response)
+            
+        return response
+            
     except Exception as e:
-        print(f"Error uploading document: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error uploading document: {str(e)}")
+        print(f"Error in upload process: {str(e)}")
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error uploading documents: {str(e)}"
+        )
 
 @router.get("/project/{project_id}", response_model=List[Document])
 async def get_project_documents(

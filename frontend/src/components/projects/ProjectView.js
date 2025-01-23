@@ -240,19 +240,35 @@ const ProjectView = () => {
   };
 
   const handleFileUpload = async (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
+    const files = Array.from(event.target.files);
+    if (!files.length) return;
 
     setUploading(true);
     try {
-      await uploadDocument(projectId, file);
+      const response = await uploadDocument(projectId, files);
       await refreshData();
-      toast.success('Document uploaded successfully');
+      
+      // Show appropriate success/warning message based on upload results
+      if (response.failed_count > 0) {
+        if (response.uploaded_count > 0) {
+          toast.warning(
+            `Uploaded ${response.uploaded_count} document(s) successfully, but ${response.failed_count} file(s) failed. Check console for details.`
+          );
+          console.log('Failed uploads:', response.failed_documents);
+        } else {
+          toast.error('Failed to upload documents. Check console for details.');
+          console.log('Failed uploads:', response.failed_documents);
+        }
+      } else {
+        toast.success(`Successfully uploaded ${response.uploaded_count} document(s)`);
+      }
     } catch (error) {
-      console.error('Error uploading document:', error);
-      toast.error('Failed to upload document');
+      console.error('Error uploading documents:', error);
+      toast.error('Failed to upload documents');
     } finally {
       setUploading(false);
+      // Reset the file input
+      event.target.value = '';
     }
   };
 
@@ -490,12 +506,14 @@ const ProjectView = () => {
               component="label"
               disabled={uploading}
             >
-              Upload File
+              Upload Files
               <input
                 type="file"
-                hidden
+                multiple
                 onChange={handleFileUpload}
-                accept=".txt,.doc,.docx,.pdf"
+                style={{ display: 'none' }}
+                id="file-upload-input"
+                accept=".txt,.md,.json,.csv"
               />
             </Button>
             <Button
