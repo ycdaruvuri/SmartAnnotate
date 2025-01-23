@@ -5,6 +5,7 @@ from datetime import datetime
 class EntityClass(BaseModel):
     name: str
     color: str
+    description: Optional[str] = None
 
 class ProjectCreate(BaseModel):
     name: str
