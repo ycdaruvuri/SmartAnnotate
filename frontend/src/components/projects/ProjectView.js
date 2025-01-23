@@ -47,7 +47,6 @@ import {
   Circle as CircleIcon,
   ArrowBack as ArrowBackIcon,
 } from '@mui/icons-material';
-import { ChromePicker } from 'react-color';
 import { toast } from 'react-toastify';
 import { 
   getProject, 
@@ -61,6 +60,7 @@ import {
   deleteProject
 } from '../../utils/api';
 import HomeButton from '../common/HomeButton';
+import ProjectCreate from './ProjectCreate';
 
 const COLOR_PALETTE = [
   '#ffeb3b', '#ffc107', '#ff9800', '#ff5722', '#f44336',
@@ -79,16 +79,13 @@ const ProjectView = () => {
   const [newText, setNewText] = useState('');
   const [uploading, setUploading] = useState(false);
   const [viewMode, setViewMode] = useState('grid');
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [showProjectCreate, setShowProjectCreate] = useState(false);
   const [editedProject, setEditedProject] = useState({
     name: '',
     description: '',
     entity_classes: [],
   });
-  const [newEntity, setNewEntity] = useState({ name: '', color: COLOR_PALETTE[0] });
-  const [showColorPicker, setShowColorPicker] = useState(false);
-  const [editingEntity, setEditingEntity] = useState(null);
-  const [editingEntityColor, setEditingEntityColor] = useState(null);
+  const [newEntity, setNewEntity] = useState({ name: '', color: COLOR_PALETTE[0], description: '' });
   const [editingEntityName, setEditingEntityName] = useState({ entity: null, name: '' });
   const [documentViewDialogOpen, setDocumentViewDialogOpen] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState(null);
@@ -155,25 +152,21 @@ const ProjectView = () => {
   };
 
   const handleEditProject = () => {
-    setEditDialogOpen(true);
+    setEditedProject({
+      name: project.name,
+      description: project.description,
+      entity_classes: project.entity_classes
+    });
+    setShowProjectCreate(true);
   };
 
-  const handleSaveProject = async () => {
+  const handleSaveProject = async (updatedProject) => {
     try {
       setLoading(true);
-      const updatedProject = {
-        name: editedProject.name,
-        description: editedProject.description,
-        entity_classes: editedProject.entity_classes
-      };
-      
-      console.log('Saving project with data:', updatedProject);
       const response = await updateProject(project.id, updatedProject);
-      console.log('Project update response:', response);
       
       // Get the number of updated documents
       const updatedCount = response?.updated_documents_count;
-      console.log('Updated documents count:', updatedCount);
       
       // Show success message with the count of updated documents
       if (updatedCount > 0) {
@@ -184,7 +177,7 @@ const ProjectView = () => {
       
       // Refresh data and close dialog
       await refreshData();
-      setEditDialogOpen(false);
+      setShowProjectCreate(false);
     } catch (error) {
       console.error('Error saving project:', error);
       toast.error('Error saving project');
@@ -208,7 +201,7 @@ const ProjectView = () => {
       ...prev,
       entity_classes: [...prev.entity_classes, { ...newEntity }]
     }));
-    setNewEntity({ name: '', color: COLOR_PALETTE[0] });
+    setNewEntity({ name: '', color: COLOR_PALETTE[0], description: '' });
   };
 
   const handleRemoveEntity = (entityName) => {
@@ -296,26 +289,22 @@ const ProjectView = () => {
     }
   };
 
-  const handleEditEntityColor = (entity) => {
-    setEditingEntity(entity);
-    setEditingEntityColor(entity.color);
-    setShowColorPicker(true);
+  const handleEntityNameInputChange = (entity, newValue) => {
+    setEditingEntityName({ entity, name: newValue });
   };
 
-  const handleSaveEntityColor = () => {
-    if (editingEntity && editingEntityColor) {
-      setEditedProject(prev => ({
-        ...prev,
-        entity_classes: prev.entity_classes.map(e => 
-          e.name === editingEntity.name 
-            ? { ...e, color: editingEntityColor }
-            : e
-        )
-      }));
+  const handleEntityNameInputBlur = async (entity) => {
+    if (editingEntityName.entity === entity && editingEntityName.name) {
+      await handleEditEntityName(entity, editingEntityName.name);
     }
-    setEditingEntity(null);
-    setEditingEntityColor(null);
-    setShowColorPicker(false);
+    setEditingEntityName({ entity: null, name: '' });
+  };
+
+  const handleEntityNameKeyPress = async (event, entity) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      event.target.blur();
+    }
   };
 
   const handleEditEntityName = async (entity, newName) => {
@@ -359,24 +348,6 @@ const ProjectView = () => {
       toast.error('Failed to update entity name');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleEntityNameInputChange = (entity, newValue) => {
-    setEditingEntityName({ entity, name: newValue });
-  };
-
-  const handleEntityNameInputBlur = async (entity) => {
-    if (editingEntityName.entity === entity && editingEntityName.name) {
-      await handleEditEntityName(entity, editingEntityName.name);
-    }
-    setEditingEntityName({ entity: null, name: '' });
-  };
-
-  const handleEntityNameKeyPress = async (event, entity) => {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      event.target.blur();
     }
   };
 
@@ -429,11 +400,31 @@ const ProjectView = () => {
     setShowDeleteProjectDialog(false);
   };
 
+  const handleEditEntityDescription = (entity, description) => {
+    setEditedProject(prev => ({
+      ...prev,
+      entity_classes: prev.entity_classes.map(e => 
+        e.name === entity.name ? { ...e, description } : e
+      )
+    }));
+  };
+
   if (loading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
         <CircularProgress />
       </Box>
+    );
+  }
+
+  if (showProjectCreate) {
+    return (
+      <ProjectCreate
+        onClose={() => setShowProjectCreate(false)}
+        onSubmit={handleSaveProject}
+        initialData={editedProject}
+        isEdit={true}
+      />
     );
   }
 
@@ -734,144 +725,6 @@ const ProjectView = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Edit Project Dialog */}
-      <Dialog
-        open={editDialogOpen}
-        onClose={() => setEditDialogOpen(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>Edit Project</DialogTitle>
-        <DialogContent>
-          <TextField
-            margin="dense"
-            label="Project Name"
-            fullWidth
-            value={editedProject.name}
-            onChange={(e) => setEditedProject(prev => ({ ...prev, name: e.target.value }))}
-          />
-          <TextField
-            margin="dense"
-            label="Description"
-            fullWidth
-            multiline
-            rows={3}
-            value={editedProject.description}
-            onChange={(e) => setEditedProject(prev => ({ ...prev, description: e.target.value }))}
-          />
-          <Typography variant="subtitle1" sx={{ mt: 2, mb: 1 }}>
-            Entity Classes
-          </Typography>
-          <Box sx={{ mb: 2 }}>
-            {editedProject.entity_classes.map((entity) => (
-              <Box key={entity.name} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                <TextField
-                  size="small"
-                  value={editingEntityName.entity === entity ? editingEntityName.name : entity.name}
-                  onChange={(e) => handleEntityNameInputChange(entity, e.target.value)}
-                  onBlur={() => handleEntityNameInputBlur(entity)}
-                  onKeyPress={(e) => handleEntityNameKeyPress(e, entity)}
-                  onFocus={() => setEditingEntityName({ entity, name: entity.name })}
-                  sx={{ mr: 1, flexGrow: 1 }}
-                />
-                <Box 
-                  sx={{ 
-                    width: 36, 
-                    height: 36, 
-                    borderRadius: '4px',
-                    backgroundColor: entity.color,
-                    cursor: 'pointer',
-                    border: '1px solid rgba(0, 0, 0, 0.23)',
-                    '&:hover': {
-                      opacity: 0.8
-                    }
-                  }}
-                  onClick={() => handleEditEntityColor(entity)}
-                />
-                <IconButton 
-                  size="small" 
-                  onClick={() => handleRemoveEntity(entity.name)}
-                  sx={{ ml: 1 }}
-                >
-                  <DeleteIcon />
-                </IconButton>
-              </Box>
-            ))}
-          </Box>
-          <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
-            <TextField
-              label="New Entity Name"
-              value={newEntity.name}
-              onChange={(e) => setNewEntity({ ...newEntity, name: e.target.value })}
-              size="small"
-              sx={{ flexGrow: 1 }}
-            />
-            <Box sx={{ position: 'relative' }}>
-              <Box
-                sx={{ 
-                  width: 36, 
-                  height: 36, 
-                  borderRadius: '4px',
-                  backgroundColor: newEntity.color,
-                  cursor: 'pointer',
-                  border: '1px solid rgba(0, 0, 0, 0.23)',
-                  '&:hover': {
-                    opacity: 0.8
-                  }
-                }}
-                onClick={() => setShowColorPicker(true)}
-              />
-              {showColorPicker && (
-                <Box sx={{ position: 'absolute', zIndex: 2, right: 0 }}>
-                  <Box
-                    sx={{
-                      position: 'fixed',
-                      top: 0,
-                      right: 0,
-                      bottom: 0,
-                      left: 0,
-                    }}
-                    onClick={() => {
-                      setShowColorPicker(false);
-                      if (editingEntity) {
-                        handleSaveEntityColor();
-                      }
-                    }}
-                  />
-                  <ChromePicker
-                    color={editingEntity ? editingEntityColor : newEntity.color}
-                    onChange={(color) => {
-                      if (editingEntity) {
-                        setEditingEntityColor(color.hex);
-                      } else {
-                        setNewEntity(prev => ({ ...prev, color: color.hex }));
-                      }
-                    }}
-                  />
-                </Box>
-              )}
-            </Box>
-            <Button variant="contained" onClick={handleAddEntity}>
-              Add Entity
-            </Button>
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setEditDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleSaveProject} variant="contained">
-            Save Changes
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      <DocumentViewDialog 
-        open={documentViewDialogOpen} 
-        onClose={() => setDocumentViewDialogOpen(false)} 
-        document={selectedDocument} 
-        entityClasses={project?.entity_classes}
-        navigate={navigate}
-      />
-
       {/* Delete Confirmation Dialog */}
       <Dialog
         open={showDeleteDialog}
@@ -909,6 +762,14 @@ const ProjectView = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <DocumentViewDialog 
+        open={documentViewDialogOpen} 
+        onClose={() => setDocumentViewDialogOpen(false)} 
+        document={selectedDocument} 
+        entityClasses={project?.entity_classes}
+        navigate={navigate}
+      />
     </Container>
   );
 };
