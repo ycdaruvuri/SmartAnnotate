@@ -533,12 +533,15 @@ const AnnotationTool = () => {
           key={`entity-${index}`}
           style={{
             backgroundColor: entity.color,
-            padding: '2px 4px',
-            margin: '0 1px',
-            borderRadius: '3px',
+            padding: '0 1px',
+            margin: '0',
+            borderRadius: '2px',
             cursor: 'pointer',
             position: 'relative',
-            display: 'inline-block'
+            display: 'inline',
+            lineHeight: '1.5',
+            boxDecorationBreak: 'clone',
+            WebkitBoxDecorationBreak: 'clone'
           }}
           onClick={(e) => handleEntityClick(e, index)}
         >
@@ -694,11 +697,20 @@ const AnnotationTool = () => {
               borderRadius: 1,
               minHeight: '200px',
               whiteSpace: 'pre-wrap',
+              wordWrap: 'break-word',
+              wordBreak: 'break-word',
               backgroundColor: '#f5f5f5',
               cursor: 'text',
-              lineHeight: 1.8,
+              lineHeight: 1.6,
+              fontSize: '1rem',
               '& mark': {
                 textDecoration: 'none',
+                display: 'inline',
+                padding: '0 1px',
+                margin: 0,
+                borderRadius: '2px',
+                boxDecorationBreak: 'clone',
+                WebkitBoxDecorationBreak: 'clone'
               },
             }}
             onMouseUp={handleTextSelection}

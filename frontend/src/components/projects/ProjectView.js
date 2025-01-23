@@ -944,9 +944,13 @@ const DocumentViewDialog = ({ open, onClose, document, entityClasses, navigate }
           key={`highlight-${index}`}
           style={{
             backgroundColor: getHighlightColor(annotation.entity),
-            padding: '0 2px',
+            padding: '0 1px',
+            margin: '0',
             borderRadius: '2px',
-            margin: '0 2px'
+            display: 'inline',
+            lineHeight: '1.5',
+            boxDecorationBreak: 'clone',
+            WebkitBoxDecorationBreak: 'clone'
           }}
         >
           {document.text.slice(annotation.start_index, annotation.end_index)}
@@ -1006,7 +1010,20 @@ const DocumentViewDialog = ({ open, onClose, document, entityClasses, navigate }
             maxHeight: '400px', 
             overflow: 'auto',
             whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word'
+            wordBreak: 'break-word',
+            wordWrap: 'break-word',
+            backgroundColor: '#f5f5f5',
+            lineHeight: 1.6,
+            fontSize: '1rem',
+            '& span[style*="background-color"]': {
+              padding: '0 1px',
+              margin: '0',
+              borderRadius: '2px',
+              display: 'inline',
+              lineHeight: '1.5',
+              boxDecorationBreak: 'clone',
+              WebkitBoxDecorationBreak: 'clone'
+            }
           }}
         >
           {renderHighlightedText()}
