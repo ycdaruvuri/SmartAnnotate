@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import os
-from routes import auth, projects, documents, users, model_manager
+from routes import auth, projects, documents, users, model_manager, auto_gen
 
 app = FastAPI()
 
@@ -27,6 +27,7 @@ app.include_router(projects.router, prefix="/projects", tags=["projects"])
 app.include_router(documents.router, prefix="/documents", tags=["documents"])
 app.include_router(users.router, prefix="/users", tags=["users"])
 app.include_router(model_manager.router, prefix="/model", tags=["model"])
+app.include_router(auto_gen.router, prefix="/auto", tags=["auto-generation"])
 
 @app.get("/")
 async def read_root():
