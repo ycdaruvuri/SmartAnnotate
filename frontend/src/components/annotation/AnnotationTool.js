@@ -474,16 +474,56 @@ const AnnotationTool = () => {
           return true;
         });
         
-        // Create entities only from valid annotations
-        const newEntities = validAnnotations.map(annotation => ({
+        // Create new entities from valid annotations
+        const newAiEntities = validAnnotations.map(annotation => ({
           start: annotation.start_index,
           end: annotation.end_index,
           label: annotation.entity,
-          text: docData.text.substring(annotation.start_index, annotation.end_index), // Always use original text
+          text: docData.text.substring(annotation.start_index, annotation.end_index),
           color: projectData.entity_classes.find(ec => ec.name === annotation.entity)?.color || '#ffeb3b'
         }));
         
-        setEntities(newEntities);
+        // Merge with existing entities
+        // First, sort both arrays by start index to handle overlaps
+        const existingEntities = [...entities].sort((a, b) => a.start - b.start);
+        const aiEntities = [...newAiEntities].sort((a, b) => a.start - b.start);
+        
+        // Merge while handling overlaps
+        const mergedEntities = [];
+        let i = 0, j = 0;
+        
+        while (i < existingEntities.length && j < aiEntities.length) {
+          const existing = existingEntities[i];
+          const ai = aiEntities[j];
+          
+          // Check for overlap
+          const overlap = !(existing.end <= ai.start || ai.end <= existing.start);
+          
+          if (overlap) {
+            // Keep the existing annotation in case of overlap
+            mergedEntities.push(existing);
+            i++;
+            // Skip the AI annotation that overlaps
+            j++;
+          } else if (existing.start < ai.start) {
+            mergedEntities.push(existing);
+            i++;
+          } else {
+            mergedEntities.push(ai);
+            j++;
+          }
+        }
+        
+        // Add remaining entities
+        while (i < existingEntities.length) {
+          mergedEntities.push(existingEntities[i++]);
+        }
+        while (j < aiEntities.length) {
+          mergedEntities.push(aiEntities[j++]);
+        }
+        
+        // Update entities with merged result
+        setEntities(mergedEntities);
         
         if (validAnnotations.length < response.annotations.length) {
           toast.warning(`Some auto-annotations were filtered out due to invalid text or positions`);
@@ -498,8 +538,6 @@ const AnnotationTool = () => {
       setAiLoading(false);
     }
   };
-
-  const hasUnsavedChanges = unsavedDocuments.has(documentId);
 
   const handleBack = () => {
     if (unsavedDocuments.size > 0) {
