@@ -610,9 +610,19 @@ const AnnotationTool = () => {
 
   return (
     <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <HomeButton position={{ top: 20, right: 20 }} />
       <Box maxWidth="lg" sx={{ mt: 4, mb: 4, flex: 1 }}>
-        <Paper sx={{ p: 3, mb: 3 }}>
+        <Paper sx={{ p: 3, mb: 3, position: 'relative' }}>
+          <Box sx={{ 
+            display: 'flex', 
+            justifyContent: 'flex-end', 
+            gap: 2, 
+            position: 'absolute',
+            top: 20,
+            right: 20,
+            zIndex: 1
+          }}>
+            <HomeButton />
+          </Box>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
             <Button
               variant="outlined"
@@ -687,6 +697,18 @@ const AnnotationTool = () => {
                 />
               ))}
             </Box>
+          </Box>
+
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+            <img 
+              src={require('../../assets/ai.jpg')}
+              alt="AI" 
+              style={{ 
+                width: '32px',
+                height: '32px',
+                objectFit: 'contain'
+              }} 
+            />
           </Box>
 
           <Box
