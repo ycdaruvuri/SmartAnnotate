@@ -22,14 +22,14 @@ os.makedirs("uploads/profile_pictures", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # Include routers
-app.include_router(auth.router, prefix="/auth", tags=["auth"])
-app.include_router(projects.router, prefix="/projects", tags=["projects"])
-app.include_router(documents.router, prefix="/documents", tags=["documents"])
-app.include_router(users.router, prefix="/users", tags=["users"])
-app.include_router(model_manager.router, prefix="/model", tags=["model"])
-app.include_router(auto_gen.router, prefix="/auto", tags=["auto-generation"])
+app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
+app.include_router(projects.router, prefix="/api/projects", tags=["projects"])
+app.include_router(documents.router, prefix="/api/documents", tags=["documents"])
+app.include_router(users.router, prefix="/api/users", tags=["users"])
+app.include_router(model_manager.router, prefix="/api/model", tags=["model"])
+app.include_router(auto_gen.router, prefix="/api/auto", tags=["auto-generation"])
 
-@app.get("/")
+@app.get("/api/")
 async def read_root():
     return {"message": "Welcome to SmartAnnotate API"}
 

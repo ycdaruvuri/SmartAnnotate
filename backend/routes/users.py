@@ -4,9 +4,10 @@ from typing import Optional
 import os
 from datetime import datetime
 from models.user import UserUpdate, UserPasswordUpdate, UserInDB, UserResponse
-from config.database import users_collection
+from config.database import users_collection, ADMIN_PASSWORD
 from utils.auth import get_password_hash, verify_password, get_current_user
 from bson import ObjectId
+from pydantic import BaseModel, EmailStr
 
 router = APIRouter()
 
@@ -15,6 +16,10 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 
 def allowed_file(filename: str) -> bool:
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+    admin_password: str
 
 @router.get("/profile", response_model=UserResponse)
 async def get_profile(current_user: dict = Depends(get_current_user)):
@@ -170,3 +175,44 @@ async def change_password(
         raise he
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/forgot-password")
+async def forgot_password(request: ForgotPasswordRequest):
+    """
+    Retrieve user's password using email and admin password.
+    For security reasons, this should be replaced with a proper password reset flow in production.
+    """
+    # Verify admin password
+    if request.admin_password != ADMIN_PASSWORD:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid admin password"
+        )
+    
+    # Find user by email
+    user = users_collection.find_one({"email": request.email})
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+    
+    # Generate a new random password
+    import secrets
+    import string
+    alphabet = string.ascii_letters + string.digits
+    new_password = ''.join(secrets.choice(alphabet) for _ in range(12))
+    
+    # Update user's password in database
+    hashed_password = get_password_hash(new_password)
+    users_collection.update_one(
+        {"email": request.email},
+        {"$set": {"hashed_password": hashed_password}}  
+    )
+    
+    # Return the new password
+    return {
+        "message": "Password has been reset",
+        "new_password": new_password,
+        "email": request.email
+    }
