@@ -67,6 +67,7 @@ const AnnotationTool = () => {
   const [showExitDialog, setShowExitDialog] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState(null);
   const [isComplete, setIsComplete] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
   const textContentRef = React.useRef(null);
 
   const fetchData = useCallback(async () => {
@@ -442,7 +443,7 @@ const AnnotationTool = () => {
 
   const handleAutoAnnotate = async () => {
     try {
-      setLoading(true);
+      setAiLoading(true);
       const response = await autoAnnotateDocument(docData.project_id, documentId);
       
       if (response.annotations) {
@@ -461,7 +462,7 @@ const AnnotationTool = () => {
       console.error('Error during auto-annotation:', error);
       toast.error('Failed to auto-annotate document');
     } finally {
-      setLoading(false);
+      setAiLoading(false);
     }
   };
 
@@ -726,18 +727,32 @@ const AnnotationTool = () => {
           </Box>
 
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
-            <img 
-              src={require('../../assets/ai.jpg')}
-              alt="AI" 
-              style={{ 
-                width: '32px',
-                height: '32px',
-                objectFit: 'contain',
-                cursor: 'pointer',
-              }} 
-              onClick={handleAutoAnnotate}
-              title="Auto-annotate document"
-            />
+            <Box sx={{ position: 'relative' }}>
+              <img 
+                src={require('../../assets/ai.jpg')}
+                alt="AI" 
+                style={{ 
+                  width: '32px',
+                  height: '32px',
+                  objectFit: 'contain',
+                  cursor: aiLoading ? 'wait' : 'pointer',
+                  opacity: aiLoading ? 0.5 : 1,
+                }} 
+                onClick={!aiLoading ? handleAutoAnnotate : undefined}
+                title="Auto-annotate document"
+              />
+              {aiLoading && (
+                <CircularProgress
+                  size={32}
+                  sx={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    zIndex: 1,
+                  }}
+                />
+              )}
+            </Box>
           </Box>
 
           <Box
