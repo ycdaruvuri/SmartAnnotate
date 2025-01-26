@@ -7,6 +7,9 @@ from config.model_manager_config import USE_LOCAL_LLM
 from config.auto_annotate_config import AUTO_ANNOTATE_NER_PROMPT
 from models.message import Message
 from auto_gen_tools.json_extractor import extract_json
+from config.database import projects_collection, documents_collection
+from bson import ObjectId
+from routes.projects import get_ner_classes
 
 router = APIRouter()
 
@@ -97,4 +100,52 @@ async def auto_annotate_ner(request: AutoAnnotateNERRequest):
         raise HTTPException(
             status_code=500,
             detail=f"Auto-annotation failed: {str(e)}"
+        )
+
+@router.post("/project/{project_id}/document/{document_id}/auto_annotate")
+async def auto_annotate_project_document(project_id: str, document_id: str, prompt: Optional[str] = None):
+    """
+    Auto-annotate a document in a project using the project's NER classes.
+    
+    Args:
+        project_id: ID of the project
+        document_id: ID of the document to annotate
+        prompt: Optional custom prompt for annotation
+    """
+    try:
+        # Get document content
+        document = documents_collection.find_one({
+            "_id": ObjectId(document_id),
+            "project_id": project_id
+        })
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        # Get text content from document
+        text = document.get("text", "")
+        if not text:
+            raise HTTPException(status_code=400, detail="Document has no content")
+        
+        # Get NER classes from project
+        ner_data = await get_ner_classes(project_id)
+        classes = ner_data.classes
+        
+        if not classes:
+            raise HTTPException(status_code=400, detail="No NER classes defined for this project")
+        
+        # Create auto-annotation request
+        annotation_request = AutoAnnotateNERRequest(
+            text=text,
+            classes=classes,
+            prompt=prompt
+        )
+        
+        # Call auto_annotate_ner
+        annotations = await auto_annotate_ner(annotation_request)
+        return annotations
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error auto-annotating document: {str(e)}"
         )
