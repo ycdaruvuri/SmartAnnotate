@@ -447,16 +447,49 @@ const AnnotationTool = () => {
       const response = await autoAnnotateDocument(docData.project_id, documentId);
       
       if (response.annotations) {
-        const newEntities = response.annotations.map(annotation => ({
+        // Filter and validate annotations
+        const validAnnotations = response.annotations.filter(annotation => {
+          // Check for valid indices
+          if (annotation.start_index < 0 || annotation.end_index > docData.text.length) {
+            console.warn('Invalid annotation indices:', {
+              start: annotation.start_index,
+              end: annotation.end_index,
+              textLength: docData.text.length
+            });
+            return false;
+          }
+          
+          // Verify text matches
+          const originalText = docData.text.substring(annotation.start_index, annotation.end_index);
+          if (originalText !== annotation.text) {
+            console.warn('Text mismatch in annotation:', {
+              expected: originalText,
+              received: annotation.text,
+              start: annotation.start_index,
+              end: annotation.end_index
+            });
+            return false;
+          }
+          
+          return true;
+        });
+        
+        // Create entities only from valid annotations
+        const newEntities = validAnnotations.map(annotation => ({
           start: annotation.start_index,
           end: annotation.end_index,
           label: annotation.entity,
-          text: annotation.text,
+          text: docData.text.substring(annotation.start_index, annotation.end_index), // Always use original text
           color: projectData.entity_classes.find(ec => ec.name === annotation.entity)?.color || '#ffeb3b'
         }));
         
         setEntities(newEntities);
-        toast.success('Auto-annotation completed successfully');
+        
+        if (validAnnotations.length < response.annotations.length) {
+          toast.warning(`Some auto-annotations were filtered out due to invalid text or positions`);
+        } else {
+          toast.success('Auto-annotation completed successfully');
+        }
       }
     } catch (error) {
       console.error('Error during auto-annotation:', error);
