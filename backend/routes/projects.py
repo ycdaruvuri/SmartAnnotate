@@ -1,12 +1,39 @@
 from fastapi import APIRouter, HTTPException, Depends
+from fastapi.responses import JSONResponse
 from models.project import ProjectCreate, Project, ProjectUpdate, ProjectResponse
 from utils.auth import get_current_user
 from config.database import projects_collection, documents_collection
 from bson import ObjectId
 from datetime import datetime
-from typing import List
+from typing import List, Dict, Any
+import logging
 
 router = APIRouter()
+
+def serialize_datetime(dt):
+    """Helper function to serialize datetime objects"""
+    if isinstance(dt, datetime):
+        return dt.isoformat()
+    return dt
+
+def serialize_document(doc: Dict[str, Any]) -> Dict[str, Any]:
+    """Helper function to serialize document data"""
+    serialized = {}
+    for key, value in doc.items():
+        if isinstance(value, ObjectId):
+            serialized[key] = str(value)
+        elif isinstance(value, datetime):
+            serialized[key] = serialize_datetime(value)
+        elif isinstance(value, dict):
+            serialized[key] = serialize_document(value)
+        elif isinstance(value, list):
+            serialized[key] = [
+                serialize_document(item) if isinstance(item, dict) else item 
+                for item in value
+            ]
+        else:
+            serialized[key] = value
+    return serialized
 
 @router.post("/", response_model=Project)
 async def create_project(project: ProjectCreate, current_user = Depends(get_current_user)):
@@ -67,6 +94,59 @@ async def get_project_documents(
         documents.append(doc)
     
     return documents
+
+@router.get("/{project_id}/export")
+async def export_project(project_id: str, current_user = Depends(get_current_user)):
+    """
+    Export project data including all documents and their annotations.
+    """
+    try:
+        # Verify project exists and belongs to user
+        project = projects_collection.find_one({
+            "_id": ObjectId(project_id),
+            "user_id": str(current_user["_id"])
+        })
+        
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        # Get all documents for this project
+        documents = []
+        try:
+            cursor = documents_collection.find({"project_id": project_id})
+            for doc in cursor:
+                try:
+                    serialized_doc = serialize_document(doc)
+                    documents.append(serialized_doc)
+                except Exception as doc_err:
+                    logging.error(f"Error processing document {doc.get('_id', 'unknown')}: {str(doc_err)}")
+                    continue
+        except Exception as docs_err:
+            logging.error(f"Error fetching documents: {str(docs_err)}")
+            documents = []  # Continue with empty documents list
+        
+        # Prepare export data
+        export_data = {
+            "project": {
+                "id": str(project["_id"]),
+                "name": project.get("name", ""),
+                "description": project.get("description", ""),
+                "created_at": serialize_datetime(project.get("created_at", datetime.utcnow())),
+                "updated_at": serialize_datetime(project.get("updated_at", datetime.utcnow())),
+                "user_id": project.get("user_id", ""),
+                "settings": project.get("settings", {})
+            },
+            "documents": documents
+        }
+        
+        return JSONResponse(content=export_data)
+        
+    except Exception as e:
+        logging.error(f"Error exporting project {project_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error exporting project: {str(e)}"
+        )
 
 @router.put("/{project_id}", response_model=ProjectResponse)
 async def update_project(
