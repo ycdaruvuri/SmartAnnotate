@@ -177,3 +177,21 @@ export const exportProjectData = async (projectId) => {
     throw error;
   }
 };
+
+export const autoAnnotateDocument = async (projectId, documentId) => {
+  try {
+    const response = await fetch(`${API_URL}/auto/project/${projectId}/document/${documentId}/auto_annotate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    });
+    if (!response.ok) {
+      throw new Error('Failed to auto-annotate document');
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('Error auto-annotating document:', error);
+    throw error;
+  }
+};

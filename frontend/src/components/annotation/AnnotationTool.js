@@ -41,6 +41,7 @@ import {
   updateDocument,
   getProject,
   getProjectDocuments,
+  autoAnnotateDocument,
 } from '../../utils/api';
 import HomeButton from '../common/HomeButton';
 
@@ -439,6 +440,31 @@ const AnnotationTool = () => {
     }
   };
 
+  const handleAutoAnnotate = async () => {
+    try {
+      setLoading(true);
+      const response = await autoAnnotateDocument(docData.project_id, documentId);
+      
+      if (response.annotations) {
+        const newEntities = response.annotations.map(annotation => ({
+          start: annotation.start_index,
+          end: annotation.end_index,
+          label: annotation.entity,
+          text: annotation.text,
+          color: projectData.entity_classes.find(ec => ec.name === annotation.entity)?.color || '#ffeb3b'
+        }));
+        
+        setEntities(newEntities);
+        toast.success('Auto-annotation completed successfully');
+      }
+    } catch (error) {
+      console.error('Error during auto-annotation:', error);
+      toast.error('Failed to auto-annotate document');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const hasUnsavedChanges = unsavedDocuments.has(documentId);
 
   const handleBack = () => {
@@ -706,8 +732,11 @@ const AnnotationTool = () => {
               style={{ 
                 width: '32px',
                 height: '32px',
-                objectFit: 'contain'
+                objectFit: 'contain',
+                cursor: 'pointer',
               }} 
+              onClick={handleAutoAnnotate}
+              title="Auto-annotate document"
             />
           </Box>
 
