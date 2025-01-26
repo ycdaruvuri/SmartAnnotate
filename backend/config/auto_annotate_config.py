@@ -11,15 +11,8 @@ AUTO_ANNOTATE_NER_PROMPT = os.getenv(
 Format the response as a JSON array where each item contains:
 {
     "text": "the extracted entity text",
-    "label": "the entity class",
-    "start": start_index,
-    "end": end_index
+    "entity": "the entity class"
 }
-Make sure the start and end indices are correct and match the exact position in the original text.
-Only include entities that exactly match the specified classes. Be precise with the entity boundaries.
-
-Text: {text}
-Classes: {classes}
-
-Return only the JSON array without any additional explanation."""
+Only include entities that exactly match the specified classes.
+"""
 )

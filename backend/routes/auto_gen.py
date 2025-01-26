@@ -6,6 +6,7 @@ from routes.model_manager import chat_with_gpt, chat_with_ollama
 from config.model_manager_config import USE_LOCAL_LLM
 from config.auto_annotate_config import AUTO_ANNOTATE_NER_PROMPT
 from models.message import Message
+from auto_gen_tools.json_extractor import extract_json
 
 router = APIRouter()
 
@@ -15,12 +16,12 @@ class AutoAnnotateNERRequest(BaseModel):
     prompt: Optional[str] = Field(None, description="Optional custom prompt for the annotation")
 
 class EntityAnnotation(BaseModel):
-    text: str
-    label: str
-    start: int
-    end: int
+    text: str = Field(..., description="The extracted entity text")
+    entity: str = Field(..., description="The entity class")
+    start_index: int = Field(..., description="Start index of the entity in the text")
+    end_index: int = Field(..., description="End index of the entity in the text")
 
-@router.post("/auto_annotate_ner", response_model=List[EntityAnnotation])
+@router.post("/auto_annotate_ner")#, response_model=List[EntityAnnotation])
 async def auto_annotate_ner(request: AutoAnnotateNERRequest):
     """
     Automatically annotate named entities in the given text using LLM.
@@ -34,69 +35,64 @@ async def auto_annotate_ner(request: AutoAnnotateNERRequest):
         List of identified entities with their positions
     """
     try:
+        print('--------------------------')
         # Prepare the prompt
-        prompt = request.prompt or AUTO_ANNOTATE_NER_PROMPT
-        formatted_prompt = prompt.format(
-            text=request.text,
-            classes=", ".join(request.classes)
-        )
+        if request.prompt is None or request.prompt == "" or request.prompt == "string":
+            request.prompt = AUTO_ANNOTATE_NER_PROMPT
+        prompt =  request.prompt
+        # formatted_prompt = prompt.format(
+        #     text=request.text,
+        #     classes=", ".join(request.classes)
+        # )
+        input_text = "The document to be annotated: "+request.text
+        classes_str ="The classes to be annotated: "+ ", ".join(request.classes)
+        instructions = "Please identify and extract named entities for the specified classes. Please return the response in JSON format."
+        formatted_prompt = prompt + "\n\n" + input_text + "\n\n" + classes_str + "\n\n" + instructions
+
+        print(f"Prompt: {formatted_prompt}")
 
         # Create message for LLM
         messages = [
             Message(role="user", content=formatted_prompt)
         ]
 
+        print(f"USING LLM: {USE_LOCAL_LLM}")
+
         # Get response from LLM
         if USE_LOCAL_LLM:
+            print(f"Running Ollama...")
             result = await chat_with_ollama(messages)
             response_text = result["response"]
         else:
+            print(f"Running ChatGPT...")
             response_text = await chat_with_gpt(messages)
-
-        # Parse the JSON response
+        print(f"Response: {response_text}")
+        print(f"Type of response: {type(response_text)}")
+        
         try:
-            annotations = json.loads(response_text)
-            if not isinstance(annotations, list):
-                raise ValueError("Response is not a JSON array")
-            
-            # Validate and convert annotations
-            validated_annotations = []
-            for ann in annotations:
-                # Ensure required fields are present
-                if not all(k in ann for k in ["text", "label", "start", "end"]):
-                    continue
-                
-                # Validate indices
-                if not (isinstance(ann["start"], int) and isinstance(ann["end"], int)):
-                    continue
-                if not (0 <= ann["start"] < len(request.text) and 0 < ann["end"] <= len(request.text)):
-                    continue
-                if ann["start"] >= ann["end"]:
-                    continue
-                
-                # Validate extracted text matches position
-                if request.text[ann["start"]:ann["end"]] != ann["text"]:
-                    continue
-                
-                # Validate label is in requested classes
-                if ann["label"] not in request.classes:
-                    continue
-                
-                validated_annotations.append(EntityAnnotation(**ann))
-            
-            return validated_annotations
-
-        except json.JSONDecodeError:
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to parse LLM response as JSON"
-            )
+            entities = extract_json(response_text)
+            # for each entity, extract the start_index, end_index, text and entity
+            # first sort the entities by length of the text
+            entities = sorted(entities, key=lambda x: len(x['text']))
+            # then for each entity, match the document text with the entity text and get the start_index and end_index
+            annotations = []
+            for entity in entities:
+                start_index = request.text.find(entity['text'])
+                end_index = start_index + len(entity['text'])
+                annotations.append(EntityAnnotation(
+                    text=entity['text'],
+                    entity=entity['entity'],
+                    start_index=start_index,
+                    end_index=end_index
+                ))
+            return {"annotations": annotations}
+           
         except Exception as e:
             raise HTTPException(
                 status_code=500,
-                detail=f"Error processing annotations: {str(e)}"
+                detail=f"Failed to extract JSON: {str(e)}"
             )
-
+        
     except Exception as e:
         raise HTTPException(
             status_code=500,

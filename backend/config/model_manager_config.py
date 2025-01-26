@@ -12,8 +12,11 @@ OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
 
 # LLM Selection
-USE_LOCAL_LLM = os.getenv("USE_LOCAL_LLM", True)  # Set to False to use ChatGPT, True to use local Ollama
-# print(f"Using local LLM: {USE_LOCAL_LLM}")
+USE_LOCAL_LLM = os.getenv("USE_LOCAL_LLM", "True")  # Set to False to use ChatGPT, True to use local Ollama
+if USE_LOCAL_LLM == "True":
+    USE_LOCAL_LLM = True
+else:
+    USE_LOCAL_LLM = False
 
 # Ollama Configuration
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "deepseek-r1:14b")  # Default model for Ollama

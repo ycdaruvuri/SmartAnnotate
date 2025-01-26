@@ -1,11 +1,12 @@
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from models.project import ProjectCreate, Project, ProjectUpdate, ProjectResponse
+from models.models_ner import ResponseModel
 from utils.auth import get_current_user
 from config.database import projects_collection, documents_collection
 from bson import ObjectId
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import logging
 
 router = APIRouter()
@@ -146,6 +147,30 @@ async def export_project(project_id: str, current_user = Depends(get_current_use
         raise HTTPException(
             status_code=500,
             detail=f"Error exporting project: {str(e)}"
+        )
+
+@router.get("/{project_id}/ner_classes", response_model=ResponseModel)
+async def get_ner_classes(project_id: str):
+    try:
+        project = projects_collection.find_one({"_id": ObjectId(project_id)})
+        
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        # Get entity_classes from the project
+        entity_classes = project.get("entity_classes", [])
+        
+        # Extract names and descriptions separately
+        classes = [entity["name"] for entity in entity_classes]
+        descriptions = [entity.get("description", "") for entity in entity_classes]
+        descriptions = [desc if desc else class_name for class_name, desc in zip(classes, descriptions)]
+
+        return ResponseModel(classes=classes, descriptions=descriptions)
+    except Exception as e:
+        logging.error(f"Error getting NER classes for project {project_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error getting NER classes: {str(e)}"
         )
 
 @router.put("/{project_id}", response_model=ProjectResponse)
