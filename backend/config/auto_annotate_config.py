@@ -16,3 +16,17 @@ Format the response as a JSON array where each item contains:
 Only include entities that exactly match the specified classes.
 """
 )
+
+AUTO_ANNOTATE_NER_PROMPT_2 = os.getenv(
+    "AUTO_ANNOTATE_NER_PROMPT_2",
+    """Analyze the following text and identify named entities that match the specified classes. For each extracted entity, return it in JSON format as follows:
+
+{
+    "text": "the extracted entity text",
+    "entity": "the entity class"
+}
+
+Input
+
+"""
+)

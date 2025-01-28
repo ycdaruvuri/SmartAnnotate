@@ -4,7 +4,7 @@ from typing import List, Optional, Dict, Any
 import json
 from routes.model_manager import chat_with_gpt, chat_with_ollama
 from config.model_manager_config import USE_LOCAL_LLM
-from config.auto_annotate_config import AUTO_ANNOTATE_NER_PROMPT
+from config.auto_annotate_config import AUTO_ANNOTATE_NER_PROMPT, AUTO_ANNOTATE_NER_PROMPT_2
 from models.message import Message
 from auto_gen_tools.json_extractor import extract_json
 from config.database import projects_collection, documents_collection
@@ -41,15 +41,24 @@ async def auto_annotate_ner(request: AutoAnnotateNERRequest):
         print('--------------------------')
         # Prepare the prompt
         if request.prompt is None or request.prompt == "" or request.prompt == "string":
-            request.prompt = AUTO_ANNOTATE_NER_PROMPT
+            request.prompt = AUTO_ANNOTATE_NER_PROMPT_2
         prompt =  request.prompt
         # formatted_prompt = prompt.format(
         #     text=request.text,
         #     classes=", ".join(request.classes)
         # )
-        input_text = "The document to be annotated: "+request.text
-        classes_str ="The classes to be annotated: "+ ", ".join(request.classes)
-        instructions = "Please identify and extract named entities for the specified classes. Please return the response in JSON format."
+        # input_text = "The document to be annotated: "+request.text
+        # classes_str ="The classes to be annotated: "+ ", ".join(request.classes)
+        # instructions = "Please identify and extract named entities for the specified classes. Please return the response in JSON format."
+
+        input_text = "Text: "+request.text
+        classes_str ="Entity Classes: "+ ", ".join(request.classes)
+        instructions = """
+        Instructions
+                1. Identify and extract only the entities that match the specified classes.
+                2. Ensure each extracted entity is relevant and accurate based on the provided classes.
+                3. Format the result as a JSON array where each item represents an extracted entity.
+        """
         formatted_prompt = prompt + "\n\n" + input_text + "\n\n" + classes_str + "\n\n" + instructions
 
         print(f"Prompt: {formatted_prompt}")
