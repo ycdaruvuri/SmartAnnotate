@@ -21,6 +21,9 @@ async def create_document(document: DocumentCreate, current_user = Depends(get_c
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
         
+        # Convert annotations to dictionaries
+        annotations_dicts = [annotation.dict() for annotation in document.annotations] if document.annotations else []
+        print(f"Annotations dicts: {annotations_dicts}")
         # Create document dictionary
         doc_dict = {
             "text": document.text,
@@ -28,7 +31,7 @@ async def create_document(document: DocumentCreate, current_user = Depends(get_c
             "filename": document.filename,
             "created_at": datetime.utcnow(),
             "updated_at": datetime.utcnow(),
-            "annotations": [],
+            "annotations": annotations_dicts,
             "entities": [],
             "status": "pending"
         }
