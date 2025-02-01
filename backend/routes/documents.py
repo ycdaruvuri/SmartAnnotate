@@ -28,12 +28,11 @@ async def create_document(document: DocumentCreate, current_user = Depends(get_c
         doc_dict = {
             "text": document.text,
             "project_id": str(document.project_id),
-            "filename": document.filename,
+            "filename": document.filename or "untitled.txt",
             "created_at": datetime.utcnow(),
             "updated_at": datetime.utcnow(),
             "annotations": annotations_dicts,
-            "entities": [],
-            "status": "pending"
+            "status": document.status
         }
         
         print(f"Inserting document: {doc_dict}")
@@ -170,17 +169,20 @@ async def get_project_documents(
             try:
                 # Convert _id to string id
                 doc["id"] = str(doc.pop("_id"))
-                # Ensure project_id is string
-                doc["project_id"] = str(doc["project_id"])
-                # Initialize missing fields
+                
+                # Ensure all required fields exist with defaults
+                doc.setdefault("text", "")
+                doc.setdefault("filename", f"document_{doc['id']}.txt")
+                doc.setdefault("project_id", project_id_str)
+                doc.setdefault("status", "pending")
                 doc.setdefault("annotations", [])
-                doc.setdefault("entities", [])
-                doc.setdefault("filename", None)
+                
                 # Convert datetime objects to strings
                 if isinstance(doc.get("created_at"), datetime):
                     doc["created_at"] = doc["created_at"].isoformat()
                 if isinstance(doc.get("updated_at"), datetime):
                     doc["updated_at"] = doc["updated_at"].isoformat()
+                
                 # Create Document object
                 document = Document(**doc)
                 documents.append(document)
@@ -221,28 +223,27 @@ async def get_document(document_id: str, current_user = Depends(get_current_user
         if not project:
             raise HTTPException(status_code=403, detail="Not authorized to access this document")
         
-        # Convert entities to annotations format if needed
-        if "entities" in doc and isinstance(doc["entities"], list):
-            doc["annotations"] = [
-                {
-                    "start_index": entity["start"],
-                    "end_index": entity["end"],
-                    "entity": entity["label"],
-                    "text": entity["text"]
-                }
-                for entity in doc["entities"]
-            ]
-        elif "annotations" not in doc or not isinstance(doc["annotations"], list):
-            doc["annotations"] = []
+        # Ensure all required fields exist with defaults
+        doc["id"] = str(doc.pop("_id"))
+        doc.setdefault("text", "")
+        doc.setdefault("filename", f"document_{doc['id']}.txt")
+        doc.setdefault("project_id", str(doc["project_id"]))
+        doc.setdefault("status", "pending")
+        doc.setdefault("annotations", [])
+        
+        # Convert datetime objects to strings
+        if isinstance(doc.get("created_at"), datetime):
+            doc["created_at"] = doc["created_at"].isoformat()
+        if isinstance(doc.get("updated_at"), datetime):
+            doc["updated_at"] = doc["updated_at"].isoformat()
         
         # Print debug info
         print("Document data:", doc)
         
-        doc["id"] = str(doc.pop("_id"))
         return Document(**doc)
     except Exception as e:
         print(f"Error in get_document: {str(e)}")
-        raise
+        raise HTTPException(status_code=500, detail=f"Error fetching document: {str(e)}")
 
 @router.put("/{document_id}", response_model=Document)
 async def update_document(
@@ -264,53 +265,37 @@ async def update_document(
         if not project:
             raise HTTPException(status_code=403, detail="Not authorized to update this document")
         
-        update_data = document_update.dict(exclude_unset=True)
-        update_data["updated_at"] = datetime.utcnow()
+        # Create update dictionary with only provided fields
+        update_dict = {}
+        if document_update.text is not None:
+            update_dict["text"] = document_update.text
+        if document_update.filename is not None:
+            update_dict["filename"] = document_update.filename
+        if document_update.status is not None:
+            update_dict["status"] = document_update.status
+        if document_update.annotations is not None:
+            update_dict["annotations"] = [annotation.dict() for annotation in document_update.annotations]
         
-        # Print debug info
-        print("Updating document. Current data:", doc)
-        print("Update data:", update_data)
+        update_dict["updated_at"] = datetime.utcnow()
         
-        # Convert annotations to entities format
-        if "annotations" in update_data:
-            if not isinstance(update_data["annotations"], list):
-                update_data["annotations"] = []
-                update_data["entities"] = []
-            else:
-                # Validate each annotation
-                for ann in update_data["annotations"]:
-                    if not all(k in ann for k in ["start_index", "end_index", "entity", "text"]):
-                        raise HTTPException(status_code=400, detail="Invalid annotation format")
-                
-                # Update both annotations and entities
-                update_data["entities"] = [
-                    {
-                        "start": ann["start_index"],
-                        "end": ann["end_index"],
-                        "label": ann["entity"],
-                        "text": ann["text"]
-                    }
-                    for ann in update_data["annotations"]
-                ]
-        
+        # Update document
         result = documents_collection.update_one(
             {"_id": ObjectId(document_id)},
-            {"$set": update_data}
+            {"$set": update_dict}
         )
+        
+        if result.modified_count == 0:
+            raise HTTPException(status_code=404, detail="Document not found or no changes made")
         
         # Get updated document
         updated_doc = documents_collection.find_one({"_id": ObjectId(document_id)})
-        if not updated_doc:
-            raise HTTPException(status_code=404, detail="Document not found after update")
-        
-        # Print debug info
-        print("Updated document:", updated_doc)
-        
         updated_doc["id"] = str(updated_doc.pop("_id"))
+        
         return Document(**updated_doc)
+        
     except Exception as e:
-        print(f"Error in update_document: {str(e)}")
-        raise
+        print(f"Error updating document: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error updating document: {str(e)}")
 
 @router.delete("/bulk-delete")
 async def bulk_delete_documents(request: Request):

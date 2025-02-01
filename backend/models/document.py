@@ -1,12 +1,6 @@
-from pydantic import BaseModel, Field
 from typing import List, Optional
+from pydantic import BaseModel
 from datetime import datetime
-
-class Entity(BaseModel):
-    start: int
-    end: int
-    label: str
-    text: str
 
 class Annotation(BaseModel):
     start_index: int
@@ -15,25 +9,23 @@ class Annotation(BaseModel):
     text: str
 
 class DocumentBase(BaseModel):
-    text: str
-    project_id: str
+    text: Optional[str] = None
     filename: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
-    entities: List[Entity] = []
-    status: str = "pending"
+    project_id: Optional[str] = None
+    status: str = 'pending'
+    created_at: datetime = datetime.now()
+    updated_at: datetime = datetime.now()
     annotations: List[Annotation] = []
-
-class DocumentCreate(DocumentBase):
-    pass
 
 class Document(DocumentBase):
     id: str
 
+class DocumentCreate(DocumentBase):
+    pass
+
 class DocumentUpdate(BaseModel):
     text: Optional[str] = None
     filename: Optional[str] = None
-    entities: Optional[List[Entity]] = None
     status: Optional[str] = None
     annotations: Optional[List[Annotation]] = None
 
@@ -45,14 +37,6 @@ class DocumentUpdate(BaseModel):
             "example": {
                 "text": "Sample document text",
                 "filename": "example.txt",
-                "entities": [
-                    {
-                        "start": 0,
-                        "end": 6,
-                        "label": "PERSON",
-                        "text": "Sample"
-                    }
-                ],
                 "status": "completed",
                 "annotations": [
                     {

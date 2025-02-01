@@ -88,38 +88,38 @@ function AnnotationTool() {
   };
 
   const handleAddEntity = async () => {
-    if (!selectedText || (!selectedType && !customLabel)) return;
+    if (!selectedText || !selectedType) return;
 
-    const newEntity = {
-      start: selectedText.start,
-      end: selectedText.end,
-      label: selectedType === 'CUSTOM' ? customLabel : selectedType,
+    const newAnnotation = {
+      start_index: selectedText.start,
+      end_index: selectedText.end,
+      entity: selectedType === 'CUSTOM' ? customLabel : selectedType,
       text: selectedText.text
     };
 
-    const updatedEntities = [...document.entities, newEntity].sort((a, b) => a.start - b.start);
+    const updatedAnnotations = [...document.annotations, newAnnotation].sort((a, b) => a.start_index - b.start_index);
     
     try {
       const response = await axios.put(`${API_URL}/documents/${id}`, {
         ...document,
-        entities: updatedEntities
+        annotations: updatedAnnotations
       });
       setDocument(response.data);
-      setOpenDialog(false);
       setSelectedText('');
       setSelectedType('');
       setCustomLabel('');
+      setOpenDialog(false);
     } catch (error) {
       console.error('Error updating document:', error);
     }
   };
 
-  const handleDeleteEntity = async (entityIndex) => {
-    const updatedEntities = document.entities.filter((_, index) => index !== entityIndex);
+  const handleDeleteEntity = async (annotationIndex) => {
+    const updatedAnnotations = document.annotations.filter((_, index) => index !== annotationIndex);
     try {
       const response = await axios.put(`${API_URL}/documents/${id}`, {
         ...document,
-        entities: updatedEntities
+        annotations: updatedAnnotations
       });
       setDocument(response.data);
     } catch (error) {
@@ -133,42 +133,41 @@ function AnnotationTool() {
     let lastIndex = 0;
     const elements = [];
     
-    document.entities.forEach((entity, index) => {
-      // Add text before entity
-      if (entity.start > lastIndex) {
+    document.annotations.forEach((annotation, index) => {
+      // Add text before annotation
+      if (annotation.start_index > lastIndex) {
         elements.push(
           <span key={`text-${lastIndex}`}>
-            {document.text.slice(lastIndex, entity.start)}
+            {document.text.slice(lastIndex, annotation.start_index)}
           </span>
         );
       }
 
-      // Add highlighted entity
+      // Add highlighted annotation
       const entityType = ENTITY_TYPES.find(type => 
-        type.label === entity.label || (type.label === 'CUSTOM' && !ENTITY_TYPES.find(t => t.label === entity.label))
+        type.label === annotation.entity || (type.label === 'CUSTOM' && !ENTITY_TYPES.find(t => t.label === annotation.entity))
       );
       const backgroundColor = entityType ? entityType.color : '#e1bee7';
 
       elements.push(
         <Box
           component="span"
-          key={`entity-${index}`}
+          key={`highlight-${index}`}
           sx={{
             backgroundColor,
-            padding: '2px 4px',
-            margin: '0 2px',
-            borderRadius: '4px',
-            display: 'inline-block'
+            padding: '2px 0',
+            cursor: 'pointer',
+            '&:hover': {
+              opacity: 0.8
+            }
           }}
+          onClick={() => handleDeleteEntity(index)}
         >
-          {document.text.slice(entity.start, entity.end)}
-          <Typography variant="caption" sx={{ ml: 1, color: 'text.secondary' }}>
-            ({entity.label})
-          </Typography>
+          {document.text.slice(annotation.start_index, annotation.end_index)}
         </Box>
       );
 
-      lastIndex = entity.end;
+      lastIndex = annotation.end_index;
     });
 
     // Add remaining text
@@ -208,22 +207,18 @@ function AnnotationTool() {
 
       <Paper sx={{ p: 3 }}>
         <Typography variant="h6" gutterBottom>
-          Entities
+          Annotations
         </Typography>
         <List>
-          {document.entities.map((entity, index) => (
-            <ListItem
-              key={index}
-              secondaryAction={
-                <IconButton edge="end" onClick={() => handleDeleteEntity(index)}>
-                  <DeleteIcon />
-                </IconButton>
-              }
-            >
+          {document.annotations.map((annotation, index) => (
+            <ListItem key={index}>
               <ListItemText
-                primary={`${entity.text} (${entity.label})`}
-                secondary={`Position: ${entity.start}-${entity.end}`}
+                primary={`${annotation.entity}: ${annotation.text}`}
+                secondary={`Position: ${annotation.start_index}-${annotation.end_index}`}
               />
+              <IconButton edge="end" onClick={() => handleDeleteEntity(index)}>
+                <DeleteIcon />
+              </IconButton>
             </ListItem>
           ))}
         </List>

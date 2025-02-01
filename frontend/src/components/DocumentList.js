@@ -24,6 +24,7 @@ function DocumentList() {
   const [documents, setDocuments] = useState([]);
   const [openDialog, setOpenDialog] = useState(false);
   const [newText, setNewText] = useState('');
+  const [projectId, setProjectId] = useState(''); // Add this line
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -43,11 +44,14 @@ function DocumentList() {
     try {
       const response = await axios.post(`${API_URL}/documents/`, {
         text: newText,
-        entities: [],
+        project_id: projectId,
+        filename: `document_${Date.now()}.txt`,
+        annotations: [],
         status: 'pending'
       });
       setDocuments([...documents, response.data]);
       setNewText('');
+      setProjectId(''); // Add this line
       setOpenDialog(false);
     } catch (error) {
       console.error('Error adding document:', error);
@@ -105,6 +109,13 @@ function DocumentList() {
         <DialogContent>
           <TextField
             autoFocus
+            margin="dense"
+            label="Project ID"
+            fullWidth
+            value={projectId}
+            onChange={(e) => setProjectId(e.target.value)}
+          />
+          <TextField
             margin="dense"
             label="Document Text"
             fullWidth
