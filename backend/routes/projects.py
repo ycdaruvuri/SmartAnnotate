@@ -76,7 +76,6 @@ async def get_project_documents(
     project_id: str,
     page: int = 1,
     page_size: int = 10,
-    search: dict = None,
     current_user = Depends(get_current_user)
 ):
     # First verify the project exists and belongs to the user
@@ -91,19 +90,11 @@ async def get_project_documents(
     # Calculate skip value for pagination
     skip = (page - 1) * page_size
     
-    # Build the base query with project_id
-    query = {"project_id": project_id}
-    
-    # Merge with search query if provided
-    if search:
-        query.update(search)
-    
     # Get total count for pagination
-    total_documents = documents_collection.count_documents(query)
+    total_documents = documents_collection.count_documents({"project_id": project_id})
     
     # Get paginated documents
-    cursor = documents_collection.find(query).sort("_id", -1).skip(skip).limit(page_size)
-    
+    cursor = documents_collection.find({"project_id": project_id}).skip(skip).limit(page_size)
     documents = []
     for doc in cursor:
         doc["id"] = str(doc.pop("_id"))
