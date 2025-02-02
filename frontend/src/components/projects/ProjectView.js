@@ -32,6 +32,11 @@ import {
   TableRow,
   Checkbox,
   Tooltip,
+  Pagination,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem
 } from '@mui/material';
 import {
   ViewModule as GridViewIcon,
@@ -92,6 +97,10 @@ const ProjectView = () => {
   const [selectedDocuments, setSelectedDocuments] = useState([]);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showDeleteProjectDialog, setShowDeleteProjectDialog] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalDocuments, setTotalDocuments] = useState(0);
 
   useEffect(() => {
     let isSubscribed = true;
@@ -150,6 +159,24 @@ const ProjectView = () => {
       setLoading(false);
     }
   };
+
+  const fetchDocuments = async () => {
+    try {
+      const response = await getProjectDocuments(projectId, { 
+        page, 
+        pageSize 
+      });
+      setDocuments(response.documents);
+      setTotalPages(response.total_pages);
+      setTotalDocuments(response.total);
+    } catch (error) {
+      console.error('Error fetching documents:', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchDocuments();
+  }, [projectId, page, pageSize]);
 
   const handleEditProject = () => {
     setEditedProject({
@@ -356,11 +383,13 @@ const ProjectView = () => {
     setDocumentViewDialogOpen(true);
   };
 
-  const handleSelectAll = (event) => {
-    if (event.target.checked) {
-      setSelectedDocuments(documents.map(doc => doc.id));
-    } else {
+  const handleSelectAll = () => {
+    if (!Array.isArray(documents)) return;
+    
+    if (selectedDocuments.length === documents.length) {
       setSelectedDocuments([]);
+    } else {
+      setSelectedDocuments(documents.map(doc => doc.id));
     }
   };
 
@@ -528,36 +557,71 @@ const ProjectView = () => {
           </Box>
         </Box>
 
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Box>
+            <FormControl variant="outlined" size="small" sx={{ mr: 2 }}>
+              <InputLabel>Items per page</InputLabel>
+              <Select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(e.target.value);
+                  setPage(1); // Reset to first page when changing page size
+                }}
+                label="Items per page"
+              >
+                <MenuItem value={5}>5</MenuItem>
+                <MenuItem value={10}>10</MenuItem>
+                <MenuItem value={25}>25</MenuItem>
+                <MenuItem value={50}>50</MenuItem>
+              </Select>
+            </FormControl>
+            <Typography variant="body2" color="text.secondary" component="span">
+              Total: {totalDocuments} documents
+            </Typography>
+          </Box>
+          <Pagination
+            count={totalPages}
+            page={page}
+            onChange={(event, newPage) => setPage(newPage)}
+            color="primary"
+            showFirstButton
+            showLastButton
+          />
+        </Box>
+
         {viewMode === 'grid' ? (
           <>
             <Box sx={{ mb: 2, display: 'flex', alignItems: 'center' }}>
-              <Checkbox
-                indeterminate={selectedDocuments.length > 0 && selectedDocuments.length < documents.length}
-                checked={documents.length > 0 && selectedDocuments.length === documents.length}
-                onChange={handleSelectAll}
-              />
-              <Typography variant="body2" sx={{ ml: 1 }}>
-                Select All
-              </Typography>
+              {selectedDocuments.length > 0 && (
+                <Button
+                  variant="contained"
+                  color="error"
+                  onClick={() => setShowDeleteDialog(true)}
+                  startIcon={<DeleteIcon />}
+                  sx={{ mr: 2 }}
+                >
+                  Delete Selected ({selectedDocuments.length})
+                </Button>
+              )}
             </Box>
             <Grid container spacing={3}>
-              {documents.map((doc) => (
-                <Grid item xs={12} sm={6} md={4} key={doc.id}>
+              {Array.isArray(documents) && documents.map((document) => (
+                <Grid item xs={12} sm={6} md={4} key={document.id}>
                   <Paper 
                     sx={{ 
                       p: 2,
                       height: '100%',
                       position: 'relative',
-                      border: selectedDocuments.includes(doc.id) ? 2 : 1,
-                      borderColor: selectedDocuments.includes(doc.id) ? 'primary.main' : 'divider',
+                      border: selectedDocuments.includes(document.id) ? 2 : 1,
+                      borderColor: selectedDocuments.includes(document.id) ? 'primary.main' : 'divider',
                       display: 'flex',
                       flexDirection: 'column'
                     }}
                   >
                     <Box sx={{ position: 'absolute', top: 8, left: 8, zIndex: 1 }}>
                       <Checkbox
-                        checked={selectedDocuments.includes(doc.id)}
-                        onChange={() => handleSelectDocument(doc.id)}
+                        checked={selectedDocuments.includes(document.id)}
+                        onChange={() => handleSelectDocument(document.id)}
                         onClick={(e) => e.stopPropagation()}
                       />
                     </Box>
@@ -568,7 +632,7 @@ const ProjectView = () => {
                         display: 'flex', 
                         flexDirection: 'column' 
                       }}
-                      onClick={() => handleSelectDocument(doc.id)}
+                      onClick={() => handleSelectDocument(document.id)}
                     >
                       <Typography 
                         variant="body2" 
@@ -582,7 +646,7 @@ const ProjectView = () => {
                           WebkitBoxOrient: 'vertical'
                         }}
                       >
-                        {doc.text}
+                        {document.text}
                       </Typography>
                       <Box sx={{ 
                         display: 'flex', 
@@ -593,11 +657,11 @@ const ProjectView = () => {
                         <Typography
                           variant="body2"
                           sx={{
-                            color: doc.status === 'completed' ? 'success.main' : 'text.secondary',
+                            color: document.status === 'completed' ? 'success.main' : 'text.secondary',
                             textTransform: 'capitalize'
                           }}
                         >
-                          {doc.status?.replace('_', ' ') || 'Not Started'}
+                          {document.status?.replace('_', ' ') || 'Not Started'}
                         </Typography>
                         <Box>
                           <Tooltip title="View">
@@ -605,7 +669,7 @@ const ProjectView = () => {
                               size="small"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleDocumentView(doc);
+                                handleDocumentView(document);
                               }}
                             >
                               <VisibilityIcon />
@@ -616,7 +680,7 @@ const ProjectView = () => {
                               size="small"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                navigate(`/annotate/${doc.id}`);
+                                navigate(`/annotate/${document.id}`);
                               }}
                             >
                               <EditIcon />
@@ -637,8 +701,14 @@ const ProjectView = () => {
                 <TableRow>
                   <TableCell padding="checkbox">
                     <Checkbox
-                      indeterminate={selectedDocuments.length > 0 && selectedDocuments.length < documents.length}
-                      checked={documents.length > 0 && selectedDocuments.length === documents.length}
+                      indeterminate={
+                        selectedDocuments.length > 0 &&
+                        selectedDocuments.length < documents.length
+                      }
+                      checked={
+                        documents.length > 0 &&
+                        selectedDocuments.length === documents.length
+                      }
                       onChange={handleSelectAll}
                     />
                   </TableCell>
@@ -648,33 +718,33 @@ const ProjectView = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {documents.map((doc) => (
+                {Array.isArray(documents) && documents.map((document) => (
                   <TableRow
-                    key={doc.id}
+                    key={document.id}
                     hover
-                    selected={selectedDocuments.includes(doc.id)}
+                    selected={selectedDocuments.includes(document.id)}
                   >
                     <TableCell padding="checkbox">
                       <Checkbox
-                        checked={selectedDocuments.includes(doc.id)}
-                        onChange={() => handleSelectDocument(doc.id)}
+                        checked={selectedDocuments.includes(document.id)}
+                        onChange={() => handleSelectDocument(document.id)}
                       />
                     </TableCell>
-                    <TableCell>{doc.text?.substring(0, 100) || 'No content'}</TableCell>
+                    <TableCell>{document.text?.substring(0, 100) || 'No content'}</TableCell>
                     <TableCell>
                       <Typography
                         sx={{
-                          color: doc.status === 'completed' ? 'success.main' : 'text.secondary',
+                          color: document.status === 'completed' ? 'success.main' : 'text.secondary',
                           textTransform: 'capitalize'
                         }}
                       >
-                        {doc.status?.replace('_', ' ') || 'Not Started'}
+                        {document.status?.replace('_', ' ') || 'Not Started'}
                       </Typography>
                     </TableCell>
                     <TableCell>
                       <Tooltip title="View">
                         <IconButton
-                          onClick={() => handleDocumentView(doc)}
+                          onClick={() => handleDocumentView(document)}
                           size="small"
                         >
                           <VisibilityIcon />
@@ -682,7 +752,7 @@ const ProjectView = () => {
                       </Tooltip>
                       <Tooltip title="Annotate">
                         <IconButton
-                          onClick={() => navigate(`/annotate/${doc.id}`)}
+                          onClick={() => navigate(`/annotate/${document.id}`)}
                           size="small"
                         >
                           <EditIcon />

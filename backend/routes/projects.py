@@ -8,6 +8,7 @@ from bson import ObjectId
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 import logging
+import math
 
 router = APIRouter()
 
@@ -73,8 +74,8 @@ async def get_project(project_id: str, current_user = Depends(get_current_user))
 @router.get("/{project_id}/documents")
 async def get_project_documents(
     project_id: str,
-    skip: int = 0,
-    limit: int = 10,
+    page: int = 1,
+    page_size: int = 10,
     current_user = Depends(get_current_user)
 ):
     # First verify the project exists and belongs to the user
@@ -86,15 +87,26 @@ async def get_project_documents(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    # Get documents for the project
-    documents = []
-    cursor = documents_collection.find({"project_id": project_id}).skip(skip).limit(limit)
+    # Calculate skip value for pagination
+    skip = (page - 1) * page_size
     
+    # Get total count for pagination
+    total_documents = documents_collection.count_documents({"project_id": project_id})
+    
+    # Get paginated documents
+    cursor = documents_collection.find({"project_id": project_id}).skip(skip).limit(page_size)
+    documents = []
     for doc in cursor:
         doc["id"] = str(doc.pop("_id"))
         documents.append(doc)
     
-    return documents
+    return {
+        "total": total_documents,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": math.ceil(total_documents / page_size),
+        "documents": documents
+    }
 
 @router.get("/{project_id}/export")
 async def export_project(project_id: str, current_user = Depends(get_current_user)):
