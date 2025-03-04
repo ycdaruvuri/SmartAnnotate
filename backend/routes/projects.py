@@ -70,35 +70,35 @@ async def get_project(project_id: str, current_user = Depends(get_current_user))
     project["id"] = str(project.pop("_id"))
     return Project(**project)
 
-@router.get("/{project_id}/documents")
-async def get_project_documents(
-    project_id: str,
-    page: int = 1,
-    docsPerPage: int = 5,
-    current_user = Depends(get_current_user)
-):
+# @router.get("/{project_id}/documents")
+# async def get_project_documents(
+#     project_id: str,
+#     page: int = 1,
+#     docsPerPage: int = 5,
+#     current_user = Depends(get_current_user)
+# ):
     
-    # First verify the project exists and belongs to the user
-    project = projects_collection.find_one({
-        "_id": ObjectId(project_id),
-        "user_id": str(current_user["_id"])
-    })
+#     # First verify the project exists and belongs to the user
+#     project = projects_collection.find_one({
+#         "_id": ObjectId(project_id),
+#         "user_id": str(current_user["_id"])
+#     })
     
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+#     if not project:
+#         raise HTTPException(status_code=404, detail="Project not found")
     
-    # Get documents for the project
-    skip = (page - 1) * docsPerPage
+#     # Get documents for the project
+#     skip = (page - 1) * docsPerPage
 
-    cursor = documents_collection.find({"project_id": project_id}).skip(skip).limit(docsPerPage)
-    documents = []
+#     cursor = documents_collection.find({"project_id": project_id}).skip(skip).limit(docsPerPage)
+#     documents = []
     
     
-    for doc in cursor:
-        doc["id"] = str(doc.pop("_id"))
-        documents.append(doc)
+#     for doc in cursor:
+#         doc["id"] = str(doc.pop("_id"))
+#         documents.append(doc)
     
-    return documents
+    
 
 @router.get("/{project_id}/export")
 async def export_project(project_id: str, current_user = Depends(get_current_user)):

@@ -95,7 +95,13 @@ const ProjectView = () => {
   const [page, setPage] = useState(1);
   const [docsPerPage, setDocsPerPage] = useState(5);
   const [totalPages, setTotalPages] = useState(1);
+  const [filterQuery, setFilterQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
 
+  const handleSearch = (e) => {
+    setSearchQuery(filterQuery);
+    setPage(1); // Reset to first page when applying new query
+  };
 
   const handleNext = () => {
     if (page < totalPages) setPage((prevPage) => prevPage + 1);
@@ -114,15 +120,19 @@ const ProjectView = () => {
     setPage(1); // Reset to first page when changing docsPerPage
   };
 
+  
+
   useEffect(() => {
     let isSubscribed = true;
-
     const fetchData = async () => {
+      console.log(page)
+      console.log(filterQuery)
+      console.log(searchQuery)
       try {
         setLoading(true);
         const [projectData, documentsData] = await Promise.all([
           getProject(projectId),
-          getProjectDocuments(projectId, { page: page, docsPerPage: docsPerPage }) // Fetch all documents
+          getProjectDocuments(projectId, { page: page, docsPerPage: docsPerPage, searchQuery: searchQuery}) // Fetch all documents
         ]);
 
         if (isSubscribed) {
@@ -131,8 +141,12 @@ const ProjectView = () => {
           setProject(projectData);
           setEditedProject(projectData);
           setDocuments(documents);
+          console.log(page)
+          console.log(filterQuery)
+          console.log(searchQuery)
         }
         console.log("Documents:", documents, typeof documents);
+        
       } catch (error) {
         console.error('Error fetching data:', error);
         if (isSubscribed) {
@@ -152,14 +166,14 @@ const ProjectView = () => {
     return () => {
       isSubscribed = false;
     };
-  }, [projectId,page,docsPerPage]);
+  }, [projectId,page,docsPerPage,searchQuery]);
 
   const refreshData = async () => {
     try {
       setLoading(true);
       const [projectData, documentsData] = await Promise.all([
         getProject(projectId),
-        getProjectDocuments(projectId, { page: page, docsPerPage: docsPerPage }) // Fetch all documents
+        getProjectDocuments(projectId, { page: page, docsPerPage: docsPerPage, searchQuery: searchQuery }) // Fetch all documents
       ]);
       const { total_count, documents } = documentsData;
 
@@ -550,6 +564,10 @@ const ProjectView = () => {
               </Button>
             )}
           </Box>
+        </Box>
+        <Box sx={{ mb: 2, display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+          <TextField label="Enter MongoDB Query"  variant="outlined" value={filterQuery} onChange={(e) => setFilterQuery(e.target.value)} placeholder='{"status": "completed"}' sx={{ flex: 1 }} />
+          <Button variant="contained" onClick={handleSearch}> Search </Button>
         </Box>
 
         {viewMode === 'grid' ? (
